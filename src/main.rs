@@ -106,8 +106,15 @@ async fn stream(mut s: TcpStream) {
 					)
 					.unwrap();
 					for sample in samples {
-						if s.write(&((sample * 32768_f32) as i16).to_le_bytes()).await.is_err() {
-							break 'track;
+						let result = s.write(&((sample * 32768_f32) as i16).to_le_bytes()).await;
+						if result.is_err() {
+							// Socket error -> stop
+							return;
+						} else {
+							if result.unwrap() == 0 {
+								// If socket cannot accept data -> stop
+								return;
+							}
 						}
 					}
 					continue;
