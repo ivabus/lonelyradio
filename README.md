@@ -1,0 +1,39 @@
+# lonelyradio
+
+> TCP radio for singles
+
+Radio that uses unencrypted TCP socket for broadcasting raw PCM (16/44.1/LE) stream
+
+Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia).
+
+## Build
+
+```shell
+cargo build -r
+```
+
+## Run
+
+```
+lonelyradio [-a <ADDRESS:PORT>] <MUSIC_FOLDER>
+```
+
+All files (recursively) will be shuffled and played back.
+
+### Clients
+
+FFplay (from FFmpeg)
+
+```shell
+nc <SERVER> <PORT> | ffplay -f s16le -vn -ac 2 -ar 44100 -nodisp -autoexit -
+```
+
+MPV
+
+```shell
+nc <SERVER> <PORT> | mpv --audio-channels=stereo --audio-samplerate=44100 --demuxer-rawaudio-format=s16le --demuxer=rawaudio -
+```
+
+## License
+
+lonelyradio is licensed under the terms of the [MIT license](./LICENSE).
