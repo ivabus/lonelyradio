@@ -72,7 +72,7 @@ async fn stream(mut s: TcpStream) {
 
 		if args.public_log {
 			eprintln!(
-				"[{}] {} to {}\nc",
+				"[{}] {} to {}",
 				Local::now().to_rfc3339(),
 				track.to_str().unwrap(),
 				s.peer_addr().unwrap().port()
