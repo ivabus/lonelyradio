@@ -33,6 +33,21 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
 	entry.file_name().to_str().map(|s| entry.depth() == 0 || !s.starts_with('.')).unwrap_or(false)
 }
 
+// Recursively finding music file
+fn pick_track(tracklist: &Vec<PathBuf>) -> &PathBuf {
+	let mut track = tracklist.choose(&mut thread_rng()).unwrap();
+	while !track.metadata().unwrap().is_file() {
+		track = pick_track(tracklist)
+	}
+	// Skipping "images" (covers)
+	while "jpgjpegpngwebp"
+		.contains(&track.extension().unwrap().to_str().unwrap().to_ascii_lowercase())
+	{
+		track = pick_track(tracklist)
+	}
+	track
+}
+
 async fn stream(mut s: TcpStream) {
 	let tracklist = walkdir::WalkDir::new(Args::parse().dir)
 		.into_iter()
@@ -41,10 +56,7 @@ async fn stream(mut s: TcpStream) {
 		.map(|x| x.into_path())
 		.collect::<Vec<PathBuf>>();
 	'track: loop {
-		let mut track = tracklist.choose(&mut thread_rng()).unwrap();
-		while !track.metadata().unwrap().is_file() {
-			track = tracklist.choose(&mut thread_rng()).unwrap()
-		}
+		let track = pick_track(&tracklist);
 		println!(
 			"[{}] {} to {}",
 			Local::now().to_rfc3339(),
