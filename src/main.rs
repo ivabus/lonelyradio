@@ -1,9 +1,10 @@
+use std::path::PathBuf;
+
 use chrono::Local;
 use clap::Parser;
 use rand::prelude::*;
 use rand::seq::SliceRandom;
 use samplerate::ConverterType;
-use std::path::PathBuf;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::formats::FormatOptions;
@@ -22,6 +23,9 @@ struct Args {
 
 	#[arg(short, long)]
 	public_log: bool,
+
+	#[arg(short, long)]
+	war: bool,
 }
 
 #[tokio::main]
@@ -63,19 +67,29 @@ async fn stream(mut s: TcpStream) {
 	'track: loop {
 		let track = pick_track(&tracklist);
 		println!(
-			"[{}] {} to {}:{}",
+			"[{}] {} to {}:{}{}",
 			Local::now().to_rfc3339(),
 			track.to_str().unwrap(),
 			s.peer_addr().unwrap().ip(),
-			s.peer_addr().unwrap().port()
+			s.peer_addr().unwrap().port(),
+			if args.war {
+				" with WAR.rs"
+			} else {
+				""
+			}
 		);
 
 		if args.public_log {
 			eprintln!(
-				"[{}] {} to {}",
+				"[{}] {} to {}{}",
 				Local::now().to_rfc3339(),
 				track.to_str().unwrap(),
-				s.peer_addr().unwrap().port()
+				s.peer_addr().unwrap().port(),
+				if args.war {
+					" with WAR.rs"
+				} else {
+					""
+				}
 			);
 		}
 
@@ -134,7 +148,16 @@ async fn stream(mut s: TcpStream) {
 					)
 					.unwrap();
 					for sample in samples {
-						let result = s.write(&((sample * 32768_f32) as i16).to_le_bytes()).await;
+						let result = s
+							.write(
+								&(if args.war {
+									sample.signum() as i16 * 32767
+								} else {
+									(sample * 32768_f32) as i16
+								})
+								.to_le_bytes(),
+							)
+							.await;
 						if result.is_err() {
 							// Socket error -> stop
 							return;
