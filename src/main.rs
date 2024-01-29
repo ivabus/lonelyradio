@@ -58,9 +58,10 @@ async fn stream(mut s: TcpStream) {
 	'track: loop {
 		let track = pick_track(&tracklist);
 		println!(
-			"[{}] {} to {}",
+			"[{}] {} to {}:{}",
 			Local::now().to_rfc3339(),
 			track.to_str().unwrap(),
+			s.peer_addr().unwrap().ip().to_string(),
 			s.peer_addr().unwrap().port()
 		);
 		let file = Box::new(std::fs::File::open(track).unwrap());
