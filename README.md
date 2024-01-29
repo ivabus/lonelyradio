@@ -15,10 +15,10 @@ cargo build -r
 ## Run
 
 ```
-lonelyradio [-a <ADDRESS:PORT>] <MUSIC_FOLDER>
+lonelyradio [-a <ADDRESS:PORT>] <MUSIC_FOLDER> [-p]
 ```
 
-All files (recursively) will be shuffled and played back.
+All files (recursively) will be shuffled and played back. Public log will be displayed to stderr, private to stdout.
 
 ### Clients
 

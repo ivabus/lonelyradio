@@ -19,11 +19,15 @@ struct Args {
 	dir: PathBuf,
 	#[arg(short, default_value = "0.0.0.0:5894")]
 	address: String,
+
+	#[arg(short, long)]
+	public_log: bool,
 }
 
 #[tokio::main]
 async fn main() {
 	let listener = TcpListener::bind(Args::parse().address).await.unwrap();
+
 	loop {
 		let (socket, _) = listener.accept().await.unwrap();
 		tokio::spawn(stream(socket));
@@ -49,6 +53,7 @@ fn pick_track(tracklist: &Vec<PathBuf>) -> &PathBuf {
 }
 
 async fn stream(mut s: TcpStream) {
+	let args = Args::parse();
 	let tracklist = walkdir::WalkDir::new(Args::parse().dir)
 		.into_iter()
 		.filter_entry(is_not_hidden)
@@ -61,9 +66,19 @@ async fn stream(mut s: TcpStream) {
 			"[{}] {} to {}:{}",
 			Local::now().to_rfc3339(),
 			track.to_str().unwrap(),
-			s.peer_addr().unwrap().ip().to_string(),
+			s.peer_addr().unwrap().ip(),
 			s.peer_addr().unwrap().port()
 		);
+
+		if args.public_log {
+			eprintln!(
+				"[{}] {} to {}\nc",
+				Local::now().to_rfc3339(),
+				track.to_str().unwrap(),
+				s.peer_addr().unwrap().port()
+			);
+		}
+
 		let file = Box::new(std::fs::File::open(track).unwrap());
 		let mut hint = Hint::new();
 		hint.with_extension(track.extension().unwrap().to_str().unwrap());
@@ -123,11 +138,9 @@ async fn stream(mut s: TcpStream) {
 						if result.is_err() {
 							// Socket error -> stop
 							return;
-						} else {
-							if result.unwrap() == 0 {
-								// If socket cannot accept data -> stop
-								return;
-							}
+						} else if result.unwrap() == 0 {
+							// If socket cannot accept data -> stop
+							return;
 						}
 					}
 					continue;
