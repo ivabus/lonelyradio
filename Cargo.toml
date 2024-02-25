@@ -1,17 +1,36 @@
+[workspace]
+members = ["monoclient"]
+
 [package]
 name = "lonelyradio"
 description = "TCP radio for singles"
 version = "0.1.6"
 edition = "2021"
 license = "MIT"
-authors = [ "Ivan Bushchik <ivabus@ivabus.dev>" ]
+authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 repository = "https://github.com/ivabus/lonelyradio"
 
 [dependencies]
 rand = "0.8.5"
-clap = { version = "4.4.18", features = [ "derive" ] }
-tokio = { version = "1.35.1", features = [ "fs", "io-util", "net", "rt-multi-thread", "rt", "macros" ] }
+clap = { version = "4.4.18", features = ["derive"] }
+tokio = { version = "1.35.1", features = [
+    "fs",
+    "io-util",
+    "net",
+    "rt-multi-thread",
+    "rt",
+    "macros",
+] }
 walkdir = "2.4.0"
-symphonia = { version = "0.5.3", features = [ "all-codecs", "all-formats", "pcm", "symphonia-codec-pcm" ] }
+symphonia = { version = "0.5.3", features = [
+    "all-codecs",
+    "all-formats",
+    "pcm",
+    "symphonia-codec-pcm",
+] }
 samplerate = "0.2.4"
 chrono = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true

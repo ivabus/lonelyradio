@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use chrono::Local;
 use clap::Parser;
 use rand::prelude::*;
-use rand::seq::SliceRandom;
 use samplerate::ConverterType;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::CODEC_TYPE_NULL;
@@ -158,13 +157,12 @@ async fn stream(mut s: TcpStream) {
 								.to_le_bytes(),
 							)
 							.await;
-						if result.is_err() {
-							// Socket error -> stop
-							return;
-						} else if result.unwrap() == 0 {
-							// If socket cannot accept data -> stop
-							return;
-						}
+						match result {
+							Err(_) | Ok(0) => {
+								return;
+							}
+							_ => (),
+						};
 					}
 					continue;
 				}

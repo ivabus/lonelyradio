@@ -22,6 +22,12 @@ All files (recursively) will be shuffled and played back. Public log will be dis
 
 ### Clients
 
+[monoclient](./monoclient) with optional channel separation, hardcoded input (16/44.1/LE).
+
+```shell
+monoclient <SERVER>:<PORT> s
+```
+
 FFplay (from FFmpeg)
 
 ```shell
@@ -36,4 +42,4 @@ nc <SERVER> <PORT> | mpv --audio-channels=stereo --audio-samplerate=44100 --demu
 
 ## License
 
-lonelyradio is licensed under the terms of the [MIT license](./LICENSE).
+lonelyradio and monoclient are licensed under the terms of the [MIT license](./LICENSE).
