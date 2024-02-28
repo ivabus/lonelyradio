@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use chrono::Local;
 use clap::Parser;
@@ -6,9 +7,7 @@ use rand::prelude::*;
 use samplerate::ConverterType;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::CODEC_TYPE_NULL;
-use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
@@ -30,42 +29,43 @@ struct Args {
 #[tokio::main]
 async fn main() {
 	let listener = TcpListener::bind(Args::parse().address).await.unwrap();
-
+	let tracklist = Arc::new(
+		walkdir::WalkDir::new(Args::parse().dir)
+			.into_iter()
+			.filter_entry(is_not_hidden)
+			.filter_map(|v| v.ok())
+			.map(|x| x.into_path())
+			.filter(track_valid)
+			.into_iter()
+			.collect::<Vec<PathBuf>>(),
+	);
 	loop {
 		let (socket, _) = listener.accept().await.unwrap();
-		tokio::spawn(stream(socket));
+		tokio::spawn(stream(socket, tracklist.clone()));
 	}
 }
 fn is_not_hidden(entry: &DirEntry) -> bool {
 	entry.file_name().to_str().map(|s| entry.depth() == 0 || !s.starts_with('.')).unwrap_or(false)
 }
 
-// Recursively finding music file
-fn pick_track(tracklist: &Vec<PathBuf>) -> &PathBuf {
-	let mut track = tracklist.choose(&mut thread_rng()).unwrap();
-	while !track.metadata().unwrap().is_file() {
-		track = pick_track(tracklist)
+fn track_valid(track: &PathBuf) -> bool {
+	if !track.metadata().unwrap().is_file() {
+		return false;
 	}
 	// Skipping "images" (covers)
-	while "jpgjpegpngwebp"
-		.contains(&track.extension().unwrap().to_str().unwrap().to_ascii_lowercase())
+	if "jpgjpegpngwebp".contains(&track.extension().unwrap().to_str().unwrap().to_ascii_lowercase())
 	{
-		track = pick_track(tracklist)
+		return false;
 	}
-	track
+	true
 }
 
-async fn stream(mut s: TcpStream) {
+async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 	let args = Args::parse();
-	let tracklist = walkdir::WalkDir::new(Args::parse().dir)
-		.into_iter()
-		.filter_entry(is_not_hidden)
-		.filter_map(|v| v.ok())
-		.map(|x| x.into_path())
-		.collect::<Vec<PathBuf>>();
+
 	'track: loop {
-		let track = pick_track(&tracklist);
-		println!(
+		let track = tracklist.choose(&mut thread_rng()).unwrap();
+		eprintln!(
 			"[{}] {} to {}:{}{}",
 			Local::now().to_rfc3339(),
 			track.to_str().unwrap(),
@@ -79,7 +79,7 @@ async fn stream(mut s: TcpStream) {
 		);
 
 		if args.public_log {
-			eprintln!(
+			println!(
 				"[{}] {} to {}{}",
 				Local::now().to_rfc3339(),
 				track.to_str().unwrap(),
@@ -95,13 +95,14 @@ async fn stream(mut s: TcpStream) {
 		let file = Box::new(std::fs::File::open(track).unwrap());
 		let mut hint = Hint::new();
 		hint.with_extension(track.extension().unwrap().to_str().unwrap());
-		let mss = MediaSourceStream::new(file, Default::default());
-
-		let meta_opts: MetadataOptions = Default::default();
-		let fmt_opts: FormatOptions = Default::default();
 
 		let probed = symphonia::default::get_probe()
-			.format(&hint, mss, &fmt_opts, &meta_opts)
+			.format(
+				&hint,
+				MediaSourceStream::new(file, Default::default()),
+				&Default::default(),
+				&Default::default(),
+			)
 			.expect("unsupported format");
 
 		let mut format = probed.format;
@@ -138,14 +139,18 @@ async fn stream(mut s: TcpStream) {
 					let mut byte_buf =
 						SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 					byte_buf.copy_interleaved_ref(decoded);
-					let samples = samplerate::convert(
-						rate,
-						44100,
-						2,
-						ConverterType::Linear,
-						byte_buf.samples(),
-					)
-					.unwrap();
+					let samples = if rate != 44100 {
+						samplerate::convert(
+							rate,
+							44100,
+							2,
+							ConverterType::Linear,
+							byte_buf.samples(),
+						)
+						.unwrap()
+					} else {
+						byte_buf.samples().to_vec()
+					};
 					for sample in samples {
 						let result = s
 							.write(

@@ -4,7 +4,7 @@ members = ["monoclient"]
 [package]
 name = "lonelyradio"
 description = "TCP radio for singles"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
@@ -22,11 +22,10 @@ tokio = { version = "1.35.1", features = [
     "macros",
 ] }
 walkdir = "2.4.0"
-symphonia = { version = "0.5.3", features = [
+symphonia = { version = "0.5.4", features = [
     "all-codecs",
     "all-formats",
-    "pcm",
-    "symphonia-codec-pcm",
+    "opt-simd",
 ] }
 samplerate = "0.2.4"
 chrono = "0.4"
