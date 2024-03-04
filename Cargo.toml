@@ -1,5 +1,5 @@
 [workspace]
-members = ["monoclient"]
+members = ["monoclient", "platform/swiftui/monolib"]
 
 [package]
 name = "lonelyradio"

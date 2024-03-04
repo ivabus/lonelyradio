@@ -18,7 +18,7 @@ cargo build -r
 lonelyradio [-a <ADDRESS:PORT>] <MUSIC_FOLDER> [-p] [-w]
 ```
 
-All files (recursively) will be shuffled and played back. Public log will be displayed to stderr, private to stdout.
+All files (recursively) will be shuffled and played back. Public log will be displayed to stdout, private to stderr.
 
 ### Clients
 
@@ -39,6 +39,10 @@ MPV
 ```shell
 nc <SERVER> <PORT> | mpv --audio-channels=stereo --audio-samplerate=44100 --demuxer-rawaudio-format=s16le --demuxer=rawaudio -
 ```
+
+### Other clients
+
+SwiftUI client is availible in [platform](./platform) directory.
 
 ## License
 
