@@ -25,24 +25,12 @@ All files (recursively) will be shuffled and played back. Public log will be dis
 [monoclient](./monoclient) with optional channel separation, hardcoded input (16/44.1/LE).
 
 ```shell
-monoclient <SERVER>:<PORT> s
-```
-
-FFplay (from FFmpeg)
-
-```shell
-nc <SERVER> <PORT> | ffplay -f s16le -vn -ac 2 -ar 44100 -nodisp -autoexit -
-```
-
-MPV
-
-```shell
-nc <SERVER> <PORT> | mpv --audio-channels=stereo --audio-samplerate=44100 --demuxer-rawaudio-format=s16le --demuxer=rawaudio -
+monoclient <SERVER>:<PORT>
 ```
 
 ### Other clients
 
-SwiftUI client is availible in [platform](./platform) directory.
+SwiftUI client is availible in [platform](./platform) directory (not yet adapted for lonelyradio 0.2).
 
 ## License
 

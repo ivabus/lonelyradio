@@ -3,8 +3,8 @@ members = ["monoclient", "platform/swiftui/monolib"]
 
 [package]
 name = "lonelyradio"
-description = "TCP radio for singles"
-version = "0.1.7"
+description = "TCP radio for lonely ones"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
@@ -29,7 +29,10 @@ symphonia = { version = "0.5.4", features = [
 ] }
 samplerate = "0.2.4"
 chrono = "0.4"
+rmp-serde = "1.1.2"
+serde = { version = "1.0.197", features = ["derive"] }
+lofty = "0.18.2"
 
 [profile.release]
 opt-level = 3
-lto = true
+#lto = true
