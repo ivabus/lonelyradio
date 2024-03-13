@@ -7,9 +7,9 @@ use std::net::TcpStream;
 use std::time::Instant;
 
 // How many samples to cache before playing in samples (both channels) SHOULD BE EVEN
-const BUFFER_SIZE: usize = 2400;
+const BUFFER_SIZE: usize = 96000;
 // How many buffers to cache
-const CACHE_SIZE: usize = 100;
+const CACHE_SIZE: usize = 20;
 
 enum Channel {
 	Right,
@@ -31,6 +31,14 @@ struct Args {
 	/// More verbose
 	#[arg(short)]
 	verbose: bool,
+
+	/// Stream in f32le instead of s16le
+	#[arg(short, long)]
+	float: bool,
+
+	/// Stream in custom sample rate
+	#[arg(short, long, default_value = "44100")]
+	sample_rate: u32,
 }
 
 fn main() {
@@ -53,13 +61,28 @@ fn main() {
 	};
 	let (_stream, stream_handle) = OutputStream::try_default().unwrap();
 	let sink = Sink::try_new(&stream_handle).unwrap();
-	let mut buffer = [0u8; 4];
+	let mut buffer = vec![
+		0u8;
+		if args.float {
+			8
+		} else {
+			4
+		}
+	];
 	let mut samples = [0f32; BUFFER_SIZE];
 	let mut index = 0usize;
 	let mut first = true;
 	while stream.read_exact(&mut buffer).is_ok() {
-		let sample_l = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
-		let sample_r = byteorder::LittleEndian::read_i16(&buffer[2..]) as f32 / 32768.0;
+		let sample_l = if args.float {
+			byteorder::LittleEndian::read_f32(&buffer[..4])
+		} else {
+			byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0
+		};
+		let sample_r = if args.float {
+			byteorder::LittleEndian::read_f32(&buffer[4..])
+		} else {
+			byteorder::LittleEndian::read_i16(&buffer[2..]) as f32 / 32768.0
+		};
 		// Left channel
 		samples[index] = match channel {
 			Channel::Left | Channel::Stereo => sample_l,
@@ -102,14 +125,15 @@ fn main() {
 					} else {
 						1
 					} as f32) * BUFFER_SIZE as f32
-						/ 44100.0 / 2.0,
+						/ args.sample_rate as f32
+						/ 2.0,
 				))
 			}
 			if first && args.verbose {
 				eprintln!("Started playing in {} ms", (Instant::now() - start).as_millis());
 				first = false;
 			}
-			sink.append(SamplesBuffer::new(2, 44100, samples.as_slice()));
+			sink.append(SamplesBuffer::new(2, args.sample_rate, samples.as_slice()));
 			index = 0;
 		}
 	}

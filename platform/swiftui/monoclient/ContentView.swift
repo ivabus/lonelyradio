@@ -25,8 +25,8 @@ class MonoLib {
 }
 
 struct ContentView: View {
-    @State private var server: String = ""
-    @State private var port: String = ""
+    @State private var server: String = "ivabus.dev"
+    @State private var port: String = "5894"
     @State private var playing: Bool = true
     @State private var running: Bool = false
 
@@ -56,13 +56,15 @@ struct ContentView: View {
 
                 Button(action: {
                     if running {
-                        playing = !playing
                         toggle()
-                    }
-                    running = true
-                    let a = MonoLib()
-                    Task.init {
-                        await a.run(server: server + ":" + port)
+                        playing = !playing
+                    } else {
+                        let a = MonoLib()
+                        Task.init {
+                            await a.run(server: server + ":" + port)
+                        }
+                        running = true
+                        playing = true
                     }
                 }) {
                     Image(
@@ -73,8 +75,7 @@ struct ContentView: View {
                     .borderedProminent)
                 Button(action: {
                     reset()
-                    running = false
-                    playing = true
+                    (running, playing) = (false, true)
                 }) { Image(systemName: "stop").font(.title3) }.buttonStyle(
                     .bordered
                 ).disabled(!running)

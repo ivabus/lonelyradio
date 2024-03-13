@@ -5,16 +5,23 @@ use std::ffi::CStr;
 use std::io::Read;
 use std::net::TcpStream;
 use std::os::raw::c_char;
+use std::time::Instant;
 
 // How many samples to cache before playing in samples (both channels) SHOULD BE EVEN
-const BUFFER_SIZE: usize = 2400;
+const BUFFER_SIZE: usize = 4410;
 // How many buffers to cache
-const CACHE_SIZE: usize = 40;
+const CACHE_SIZE: usize = 20;
 
 static mut SINK: Option<Box<Sink>> = None;
-static mut RUNNING: bool = false;
-static mut STOPPED: bool = false;
-static mut RESET: bool = false;
+static mut STATE: State = State::NotStarted;
+
+#[derive(PartialEq)]
+enum State {
+	NotStarted,
+	Resetting,
+	Playing,
+	Paused,
+}
 
 #[no_mangle]
 pub extern "C" fn start(server: *const c_char) {
@@ -30,13 +37,13 @@ pub extern "C" fn start(server: *const c_char) {
 #[no_mangle]
 pub extern "C" fn toggle() {
 	unsafe {
-		if !STOPPED {
-			STOPPED = true;
+		if STATE == State::Playing {
+			STATE = State::Paused;
 			if let Some(sink) = &SINK {
 				sink.pause();
 			}
-		} else {
-			STOPPED = false;
+		} else if STATE == State::Paused {
+			STATE = State::Playing;
 			if let Some(sink) = &SINK {
 				sink.play();
 			}
@@ -47,19 +54,43 @@ pub extern "C" fn toggle() {
 #[no_mangle]
 pub extern "C" fn reset() {
 	unsafe {
-		RESET = true;
+		STATE = State::Resetting;
+		if let Some(sink) = &SINK {
+			sink.pause();
+		}
 		// Blocking main thread
-		while RESET {
-			std::thread::sleep(std::time::Duration::from_secs_f32(0.02))
+		while STATE == State::Resetting {
+			std::thread::sleep(std::time::Duration::from_secs_f32(0.01))
 		}
 	}
 }
 
+unsafe fn _reset() {
+	if let Some(sink) = &SINK {
+		sink.pause();
+		sink.clear();
+	}
+	SINK = None;
+	STATE = State::NotStarted;
+}
+
+// Reset - true, not - false
+unsafe fn watching_sleep(dur: f32) -> bool {
+	let start = Instant::now();
+	while Instant::now() < start + std::time::Duration::from_secs_f32(dur) {
+		std::thread::sleep(std::time::Duration::from_secs_f32(0.0001));
+		if STATE == State::Resetting {
+			return true;
+		}
+	}
+	false
+}
+
 unsafe fn run(server: &str) {
-	if RUNNING {
+	if STATE == State::Playing || STATE == State::Paused {
 		return;
 	}
-	RUNNING = true;
+	STATE = State::Playing;
 	let mut stream = TcpStream::connect(server).unwrap();
 	println!("Connected to {} from {}", stream.peer_addr().unwrap(), stream.local_addr().unwrap());
 	let (_stream, stream_handle) = OutputStream::try_default().unwrap();
@@ -78,19 +109,11 @@ unsafe fn run(server: &str) {
 	let mut samples = [0f32; BUFFER_SIZE];
 	let mut index = 0usize;
 	while stream.read_exact(&mut buffer).is_ok() {
-		while STOPPED {
-			std::thread::sleep(std::time::Duration::from_secs_f32(0.5))
+		while STATE == State::Paused {
+			std::thread::sleep(std::time::Duration::from_secs_f32(0.25))
 		}
-		if RESET {
-			RUNNING = false;
-			STOPPED = false;
-
-			if let Some(sink) = &SINK {
-				sink.pause();
-				sink.clear();
-			}
-			SINK = None;
-			RESET = false;
+		if STATE == State::Resetting {
+			_reset();
 			return;
 		}
 		let sample_l = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
@@ -108,15 +131,18 @@ unsafe fn run(server: &str) {
 			// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
 			if let Some(sink) = &SINK {
 				while sink.len() >= CACHE_SIZE {
-					// Sleeping exactly one buffer
-					std::thread::sleep(std::time::Duration::from_secs_f32(
-						(if sink.len() >= 2 {
-							sink.len() - 2
+					// Sleeping exactly one buffer and watching for reset signal
+					if watching_sleep(
+						if sink.len() > 2 {
+							sink.len() as f32 - 2.0
 						} else {
-							1
-						} as f32) * BUFFER_SIZE as f32
-							/ 44100.0 / 2.0,
-					))
+							0.5
+						} * BUFFER_SIZE as f32 / 44100.0
+							/ 2.0,
+					) {
+						_reset();
+						return;
+					}
 				}
 				sink.append(SamplesBuffer::new(2, 44100, samples.as_slice()));
 				index = 0;
