@@ -8,7 +8,6 @@
 #ifndef MonoLib_Bridging_Header_h
 #define MonoLib_Bridging_Header_h
 
-
 #import "monolib.h"
 
 #endif /* MonoLib_Bridging_Header_h */

@@ -7,12 +7,10 @@ use clap::Parser;
 use lofty::Accessor;
 use lofty::TaggedFileExt;
 use rand::prelude::*;
-use samplerate::ConverterType;
 use serde::Serialize;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::StandardTagKey;
 use symphonia::core::probe::Hint;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
@@ -35,6 +33,8 @@ struct Args {
 struct SentMetadata {
 	// In bytes, we need to read next track metadata
 	lenght: u64,
+	// Yep, no more interpolation
+	sample_rate: u32,
 	title: String,
 	album: String,
 	artist: String,
@@ -42,23 +42,15 @@ struct SentMetadata {
 
 async fn stream_samples(
 	track_samples: Vec<f32>,
-	rate: u32,
 	war: bool,
 	md: SentMetadata,
 	s: &mut TcpStream,
 ) -> bool {
-	let resampled = if rate != 44100 {
-		samplerate::convert(rate, 44100, 2, ConverterType::Linear, track_samples.as_slice())
-			.unwrap()
-	} else {
-		track_samples
-	};
-	let mut md = md;
-	md.lenght = resampled.len() as u64;
 	if s.write_all(rmp_serde::to_vec(&md).unwrap().as_slice()).await.is_err() {
 		return true;
 	}
-	for sample in resampled {
+
+	for sample in track_samples {
 		if s.write_all(
 			&(if war {
 				sample.signum() as i16 * 32767
@@ -121,7 +113,8 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 		let mut file = std::fs::File::open(track).unwrap();
 		let tagged = lofty::read_from(&mut file).unwrap();
 		if let Some(id3v2) = tagged.primary_tag() {
-			title = id3v2.title().unwrap_or("[No tag]".into()).to_string();
+			title =
+				id3v2.title().unwrap_or(track.file_stem().unwrap().to_string_lossy()).to_string();
 			album = id3v2.album().unwrap_or("[No tag]".into()).to_string();
 			artist = id3v2.artist().unwrap_or("[No tag]".into()).to_string()
 		};
@@ -179,7 +172,7 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 			.expect("unsupported codec");
 
 		let track_id = track.id;
-		let mut track_rate = 0;
+		let mut sample_rate = 0;
 		let mut samples = vec![];
 		loop {
 			let packet = match format.next_packet() {
@@ -188,18 +181,6 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 			};
 			while !format.metadata().is_latest() {
 				format.metadata().pop();
-				if let Some(rev) = format.metadata().current() {
-					for tag in rev.tags() {
-						println!("Looped");
-						match tag.std_key {
-							Some(StandardTagKey::Album) => album = tag.value.to_string(),
-							Some(StandardTagKey::Artist) => artist = tag.value.to_string(),
-							Some(StandardTagKey::TrackTitle) => title = tag.value.to_string(),
-							_ => {}
-						}
-						eprintln!("DBG: {} {} {}", &album, &artist, &title)
-					}
-				}
 			}
 
 			if packet.track_id() != track_id {
@@ -208,7 +189,7 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 
 			match decoder.decode(&packet) {
 				Ok(decoded) => {
-					track_rate = decoded.spec().rate;
+					sample_rate = decoded.spec().rate;
 					let mut byte_buf =
 						SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 					byte_buf.copy_interleaved_ref(decoded);
@@ -221,21 +202,15 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 				}
 			}
 		}
+		let md = SentMetadata {
+			lenght: samples.len() as u64,
+			sample_rate,
+			title,
+			album,
+			artist,
+		};
 		if !samples.is_empty() {
-			if stream_samples(
-				samples,
-				track_rate,
-				args.war,
-				SentMetadata {
-					lenght: 0,
-					title,
-					album,
-					artist,
-				},
-				&mut s,
-			)
-			.await
-			{
+			if stream_samples(samples, args.war, md, &mut s).await {
 				break;
 			}
 		}

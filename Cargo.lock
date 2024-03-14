@@ -290,15 +290,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
-name = "cmake"
-version = "0.1.50"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -573,15 +564,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsamplerate-sys"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28853b399f78f8281cd88d333b54a63170c4275f6faea66726a2bea5cca72e0d"
-dependencies = [
- "cmake",
-]
-
-[[package]]
 name = "lofty"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -622,7 +604,6 @@ dependencies = [
  "lofty",
  "rand",
  "rmp-serde",
- "samplerate",
  "serde",
  "symphonia",
  "tokio",
@@ -683,10 +664,12 @@ dependencies = [
 
 [[package]]
 name = "monolib"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "byteorder",
+ "rmp-serde",
  "rodio",
+ "serde",
 ]
 
 [[package]]
@@ -1028,15 +1011,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "samplerate"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e032b2b24715c4f982f483ea3abdb3c9ba444d9f63e87b2843d6f998f5ba2698"
-dependencies = [
- "libsamplerate-sys",
 ]
 
 [[package]]

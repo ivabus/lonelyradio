@@ -25,14 +25,19 @@ class MonoLib {
 }
 
 struct ContentView: View {
+    let timer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
     @State private var server: String = ""
     @State private var port: String = ""
     @State private var playing: Bool = true
     @State private var running: Bool = false
 
+    @State var now_playing_artist: String = ""
+    @State var now_playing_album: String = ""
+    @State var now_playing_title: String = ""
+
     var body: some View {
         VStack {
-            Text("Monoclient").font(.largeTitle).fontWidth(.expanded).bold()  //.padding(.top, 25)
+            Text("Monoclient").font(.largeTitle).fontWidth(.expanded).bold()
             VStack(alignment: .center) {
                 HStack {
                     Text("Server").frame(minWidth: 50, idealWidth: 60)
@@ -79,6 +84,15 @@ struct ContentView: View {
                     .bordered
                 ).disabled(!running)
             }.frame(width: 300)
+            Text(now_playing_artist).font(.title2).onReceive(timer) { _ in
+                now_playing_artist = String(cString: get_metadata_artist()!)
+            }
+            Text(now_playing_album).onReceive(timer) { _ in
+                now_playing_album = String(cString: get_metadata_album()!)
+            }
+            Text(now_playing_title).font(.title).bold().onReceive(timer) { _ in
+                now_playing_title = String(cString: get_metadata_title()!)
+            }
 
         }.padding()
 

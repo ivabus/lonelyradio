@@ -2,7 +2,7 @@
 
 > TCP radio for singles
 
-Radio that uses unencrypted TCP socket for broadcasting raw PCM (16/44.1/LE) stream
+Radio that uses unencrypted TCP socket for broadcasting tagged audio data.
 
 Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia).
 
@@ -22,7 +22,7 @@ All files (recursively) will be shuffled and played back. Public log will be dis
 
 ### Clients
 
-[monoclient](./monoclient) with optional channel separation, hardcoded input (16/44.1/LE).
+[monoclient](./monoclient) is a recommended client for lonelyradio
 
 ```shell
 monoclient <SERVER>:<PORT>
@@ -30,7 +30,7 @@ monoclient <SERVER>:<PORT>
 
 ### Other clients
 
-SwiftUI client is availible in [platform](./platform) directory (not yet adapted for lonelyradio 0.2).
+SwiftUI client is availible in [platform](./platform) directory.
 
 ## License
 

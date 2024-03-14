@@ -3,24 +3,19 @@ use clap::Parser;
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use serde::Deserialize;
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::net::TcpStream;
 
 // How many samples to cache before playing in samples (both channels) SHOULD BE EVEN
-const BUFFER_SIZE: usize = 2400;
+const BUFFER_SIZE: usize = 4800;
 // How many buffers to cache
-const CACHE_SIZE: usize = 100;
-
-enum Channel {
-	Right,
-	Left,
-	Stereo,
-}
+const CACHE_SIZE: usize = 10;
 
 #[derive(Deserialize, Debug)]
 struct SentMetadata {
 	// In bytes, we need to read next track metadata
 	lenght: u64,
+	sample_rate: u32,
 	title: String,
 	album: String,
 	artist: String,
@@ -30,91 +25,75 @@ struct SentMetadata {
 struct Args {
 	/// Remote address
 	address: String,
-	#[arg(short, long, default_value = "s")]
-	/// L, R or S for Left, Right or Stereo
-	channel: String,
-	#[arg(short)]
-	/// Play only on specified channel, with it if channel = Right => L=0 and R=R, without L=R and R=R. No effect on Stereo
-	single: bool,
 
-	/// Do not erase previously played track from stdout
+	/// Do not use backspace control char
 	#[arg(short)]
 	no_backspace: bool,
 }
 
-fn main() {
-	let args = Args::parse();
-	let mut stream = TcpStream::connect(args.address).unwrap();
-	println!("Connected to {} from {}", stream.peer_addr().unwrap(), stream.local_addr().unwrap());
+fn delete_chars(n: usize) {
+	print!("{}{}{}", "\u{8}".repeat(n), " ".repeat(n), "\u{8}".repeat(n));
+	std::io::stdout().flush().expect("Failed to flush stdout")
+}
 
-	let channel = match args.channel.to_ascii_lowercase().as_str() {
-		"l" => Channel::Left,
-		"r" => Channel::Right,
-		"s" => Channel::Stereo,
-		_ => panic!("Wrong channel specified"),
-	};
+fn main() {
+	let mut args = Args::parse();
+	args.no_backspace |= !std::io::stdout().is_terminal();
+	let mut stream = TcpStream::connect(&args.address)
+		.unwrap_or_else(|err| panic!("Failed to connect to {}: {}", args.address, err.to_string()));
+	println!("Connected to {} from {}", stream.peer_addr().unwrap(), stream.local_addr().unwrap());
 	let (_stream, stream_handle) = OutputStream::try_default().unwrap();
 	let sink = Sink::try_new(&stream_handle).unwrap();
-	let mut buffer = [0u8; 4];
+	let mut buffer = [0u8; 2];
 	let mut samples = [0f32; BUFFER_SIZE];
 	let mut latest_msg_len = 0;
 	print!("Playing: ");
 	loop {
 		let mut index = 0usize;
 
-		let md: SentMetadata = rmp_serde::from_read(&stream).unwrap();
-		let seconds = md.lenght / (2 * 44100);
-		let message = format!(
-			"{} - {} - {} ({}:{:02})",
-			md.artist,
-			md.album,
-			md.title,
-			seconds / 60,
-			seconds % 60
-		);
+		let md: SentMetadata =
+			rmp_serde::from_read(&stream).expect("Failed to parse track metadata");
+		let seconds = md.lenght / (2 * md.sample_rate as u64);
+		let total_lenght = format!("{}:{:02}", seconds / 60, seconds % 60);
+		let message = format!("{} - {} - {} ", md.artist, md.album, md.title);
 		if latest_msg_len != 0 {
 			if args.no_backspace {
 				print!("\nPlaying: ");
 			} else {
-				print!("{}", "\u{8}".repeat(latest_msg_len));
-				print!("{}", " ".repeat(latest_msg_len));
-				print!("{}", "\u{8}".repeat(latest_msg_len));
+				delete_chars(latest_msg_len)
 			}
 		}
 		print!("{}", message);
-		std::io::stdout().flush().unwrap();
+		let mut prev_timestamp_len = 0;
+		if args.no_backspace {
+			print!("({})", &total_lenght)
+		} else {
+			print!("(0:00 / {})", &total_lenght);
+			// (0:00/ + :00 + minutes len
+			prev_timestamp_len = 12 + format!("{}", seconds / 60).len();
+		}
+		std::io::stdout().flush().expect("Failed to flush stdout");
 		latest_msg_len = message.chars().count();
-
-		for _ in 0..md.lenght / 2 {
+		let mut second = 0;
+		for sample_index in 0..md.lenght {
+			if (sample_index / (md.sample_rate as u64 * 2)) > second {
+				second += 1;
+				if !args.no_backspace {
+					delete_chars(prev_timestamp_len);
+					let current_timestamp =
+						format!("({}:{:02} / {})", second / 60, second % 60, &total_lenght);
+					print!("{}", &current_timestamp);
+					std::io::stdout().flush().expect("Failed to flush stdout");
+					prev_timestamp_len = current_timestamp.len()
+				}
+			}
 			if stream.read_exact(&mut buffer).is_err() {
 				return;
 			};
-			let sample_l = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
-			let sample_r = byteorder::LittleEndian::read_i16(&buffer[2..]) as f32 / 32768.0;
-			// Left channel
-			samples[index] = match channel {
-				Channel::Left | Channel::Stereo => sample_l,
-				Channel::Right => {
-					if args.single {
-						0f32
-					} else {
-						sample_r
-					}
-				}
-			};
+
+			samples[index] = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
 			index += 1;
-			// Right channel
-			samples[index] = match channel {
-				Channel::Right | Channel::Stereo => sample_r,
-				Channel::Left => {
-					if args.single {
-						0f32
-					} else {
-						sample_l
-					}
-				}
-			};
-			index += 1;
+
 			if index == BUFFER_SIZE {
 				// Sink's thread is detached from main thread, so we need to synchronize with it
 				// Why we should synchronize with it?
@@ -123,20 +102,13 @@ fn main() {
 				while sink.len() >= CACHE_SIZE {
 					// Sleeping exactly one buffer
 					std::thread::sleep(std::time::Duration::from_secs_f32(
-						(if sink.len() >= 2 {
-							sink.len() - 2
-						} else {
-							1
-						} as f32) * BUFFER_SIZE as f32
-							/ 44100.0 / 2.0,
+						BUFFER_SIZE as f32 / md.sample_rate as f32 / 2.0,
 					))
 				}
-				sink.append(SamplesBuffer::new(2, 44100, samples.as_slice()));
+				sink.append(SamplesBuffer::new(2, md.sample_rate, samples.as_slice()));
 				index = 0;
 			}
 		}
-		while sink.len() != 0 {
-			std::thread::sleep(std::time::Duration::from_secs_f32(0.01))
-		}
+		sink.sleep_until_end()
 	}
 }

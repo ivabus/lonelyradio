@@ -20,4 +20,4 @@ cargo lipo --release --targets aarch64-apple-ios-sim,x86_64-apple-ios
 
 Open Xcode and run.
 
-[Screenshots](./screenshots/swiftui)
+[Screenshots (pre v0.2)](./screenshots/swiftui)

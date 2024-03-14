@@ -27,7 +27,7 @@ symphonia = { version = "0.5.4", features = [
     "all-formats",
     "opt-simd",
 ] }
-samplerate = "0.2.4"
+#samplerate = "0.2.4"
 chrono = "0.4"
 rmp-serde = "1.1.2"
 serde = { version = "1.0.197", features = ["derive"] }
