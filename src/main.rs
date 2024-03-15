@@ -32,7 +32,7 @@ struct Args {
 #[derive(Serialize)]
 struct SentMetadata {
 	// In bytes, we need to read next track metadata
-	lenght: u64,
+	length: u64,
 	// Yep, no more interpolation
 	sample_rate: u32,
 	title: String,
@@ -41,7 +41,7 @@ struct SentMetadata {
 }
 
 async fn stream_samples(
-	track_samples: Vec<f32>,
+	track_samples: Vec<i16>,
 	war: bool,
 	md: SentMetadata,
 	s: &mut TcpStream,
@@ -53,9 +53,9 @@ async fn stream_samples(
 	for sample in track_samples {
 		if s.write_all(
 			&(if war {
-				sample.signum() as i16 * 32767
+				sample.signum() * 32767
 			} else {
-				(sample * 32768_f32) as i16
+				sample
 			}
 			.to_le_bytes()),
 		)
@@ -191,7 +191,7 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 				Ok(decoded) => {
 					sample_rate = decoded.spec().rate;
 					let mut byte_buf =
-						SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+						SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
 					byte_buf.copy_interleaved_ref(decoded);
 					samples.append(&mut byte_buf.samples_mut().to_vec());
 					continue;
@@ -203,7 +203,7 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 			}
 		}
 		let md = SentMetadata {
-			lenght: samples.len() as u64,
+			length: samples.len() as u64,
 			sample_rate,
 			title,
 			album,

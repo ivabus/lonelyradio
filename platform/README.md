@@ -4,16 +4,14 @@
 
 ### Build `monolib`
 
-Run in `monolib` directory
-
 ```
-cargo lipo --release --targets aarch64-apple-ios
+cargo lipo --release --targets aarch64-apple-ios -p monolib
 ```
 
 For running in simulator
 
 ```
-cargo lipo --release --targets aarch64-apple-ios-sim,x86_64-apple-ios
+cargo lipo --release --targets aarch64-apple-ios-sim,x86_64-apple-ios -p monolib
 ```
 
 ### Build and run app

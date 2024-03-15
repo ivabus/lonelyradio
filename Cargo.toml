@@ -1,10 +1,10 @@
 [workspace]
-members = ["monoclient", "platform/swiftui/monolib"]
+members = [ "monoclient", "monolib"]
 
 [package]
 name = "lonelyradio"
 description = "TCP radio for lonely ones"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]

@@ -1,25 +1,6 @@
-use byteorder::ByteOrder;
 use clap::Parser;
-use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, Sink};
-use serde::Deserialize;
-use std::io::{IsTerminal, Read, Write};
-use std::net::TcpStream;
-
-// How many samples to cache before playing in samples (both channels) SHOULD BE EVEN
-const BUFFER_SIZE: usize = 4800;
-// How many buffers to cache
-const CACHE_SIZE: usize = 10;
-
-#[derive(Deserialize, Debug)]
-struct SentMetadata {
-	// In bytes, we need to read next track metadata
-	lenght: u64,
-	sample_rate: u32,
-	title: String,
-	album: String,
-	artist: String,
-}
+use std::io::{IsTerminal, Write};
+use std::time::{Duration, Instant};
 
 #[derive(Parser)]
 struct Args {
@@ -31,84 +12,98 @@ struct Args {
 	no_backspace: bool,
 }
 
-fn delete_chars(n: usize) {
-	print!("{}{}{}", "\u{8}".repeat(n), " ".repeat(n), "\u{8}".repeat(n));
-	std::io::stdout().flush().expect("Failed to flush stdout")
+fn delete_chars(n: usize, nb: bool) {
+	if !nb {
+		print!("{}{}{}", "\u{8}".repeat(n), " ".repeat(n), "\u{8}".repeat(n));
+		std::io::stdout().flush().expect("Failed to flush stdout")
+	} else {
+		println!()
+	}
+}
+
+fn flush() {
+	std::io::stdout().flush().unwrap();
 }
 
 fn main() {
 	let mut args = Args::parse();
 	args.no_backspace |= !std::io::stdout().is_terminal();
-	let mut stream = TcpStream::connect(&args.address)
-		.unwrap_or_else(|err| panic!("Failed to connect to {}: {}", args.address, err.to_string()));
-	println!("Connected to {} from {}", stream.peer_addr().unwrap(), stream.local_addr().unwrap());
-	let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-	let sink = Sink::try_new(&stream_handle).unwrap();
-	let mut buffer = [0u8; 2];
-	let mut samples = [0f32; BUFFER_SIZE];
-	let mut latest_msg_len = 0;
-	print!("Playing: ");
+	std::thread::spawn(move || monolib::run(&args.address));
+	while monolib::get_metadata().is_none() {}
+	let mut md = monolib::get_metadata().unwrap();
+	let seconds = md.length / md.sample_rate as u64 / 2;
+	let mut track_start = Instant::now();
+	let mut seconds_past = 0;
+	let mut msg_len = format!(
+		"Playing: {} - {} - {} ({}:{:02})",
+		md.artist,
+		md.album,
+		md.title,
+		seconds / 60,
+		seconds % 60
+	)
+	.len();
+	print!(
+		"Playing: {} - {} - {} ({}:{:02})",
+		md.artist,
+		md.album,
+		md.title,
+		seconds / 60,
+		seconds % 60
+	);
+	flush();
 	loop {
-		let mut index = 0usize;
-
-		let md: SentMetadata =
-			rmp_serde::from_read(&stream).expect("Failed to parse track metadata");
-		let seconds = md.lenght / (2 * md.sample_rate as u64);
-		let total_lenght = format!("{}:{:02}", seconds / 60, seconds % 60);
-		let message = format!("{} - {} - {} ", md.artist, md.album, md.title);
-		if latest_msg_len != 0 {
-			if args.no_backspace {
-				print!("\nPlaying: ");
-			} else {
-				delete_chars(latest_msg_len)
-			}
+		if monolib::get_metadata().unwrap() != md {
+			md = monolib::get_metadata().unwrap();
+			let seconds = md.length / md.sample_rate as u64 / 2;
+			delete_chars(msg_len, args.no_backspace);
+			msg_len = format!(
+				"Playing: {} - {} - {} ({}:{:02})",
+				md.artist,
+				md.album,
+				md.title,
+				seconds / 60,
+				seconds % 60
+			)
+			.len();
+			print!(
+				"Playing: {} - {} - {} (0:00 / {}:{:02})",
+				md.artist,
+				md.album,
+				md.title,
+				seconds / 60,
+				seconds % 60
+			);
+			flush();
+			track_start = Instant::now();
+			seconds_past = 0;
 		}
-		print!("{}", message);
-		let mut prev_timestamp_len = 0;
-		if args.no_backspace {
-			print!("({})", &total_lenght)
-		} else {
-			print!("(0:00 / {})", &total_lenght);
-			// (0:00/ + :00 + minutes len
-			prev_timestamp_len = 12 + format!("{}", seconds / 60).len();
+		if (Instant::now() - track_start).as_secs() > seconds_past && !args.no_backspace {
+			seconds_past = (Instant::now() - track_start).as_secs();
+			msg_len = format!(
+				"Playing: {} - {} - {} ({}:{:02} / {}:{:02})",
+				md.artist,
+				md.album,
+				md.title,
+				seconds_past / 60,
+				seconds_past % 60,
+				seconds / 60,
+				seconds % 60
+			)
+			.len();
+			delete_chars(msg_len, args.no_backspace);
+			print!(
+				"Playing: {} - {} - {} ({}:{:02} / {}:{:02})",
+				md.artist,
+				md.album,
+				md.title,
+				seconds_past / 60,
+				seconds_past % 60,
+				seconds / 60,
+				seconds % 60
+			);
+			flush();
 		}
-		std::io::stdout().flush().expect("Failed to flush stdout");
-		latest_msg_len = message.chars().count();
-		let mut second = 0;
-		for sample_index in 0..md.lenght {
-			if (sample_index / (md.sample_rate as u64 * 2)) > second {
-				second += 1;
-				if !args.no_backspace {
-					delete_chars(prev_timestamp_len);
-					let current_timestamp =
-						format!("({}:{:02} / {})", second / 60, second % 60, &total_lenght);
-					print!("{}", &current_timestamp);
-					std::io::stdout().flush().expect("Failed to flush stdout");
-					prev_timestamp_len = current_timestamp.len()
-				}
-			}
-			if stream.read_exact(&mut buffer).is_err() {
-				return;
-			};
-
-			samples[index] = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
-			index += 1;
-
-			if index == BUFFER_SIZE {
-				// Sink's thread is detached from main thread, so we need to synchronize with it
-				// Why we should synchronize with it?
-				// Let's say, that if we don't synchronize with it, we would have
-				// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
-				while sink.len() >= CACHE_SIZE {
-					// Sleeping exactly one buffer
-					std::thread::sleep(std::time::Duration::from_secs_f32(
-						BUFFER_SIZE as f32 / md.sample_rate as f32 / 2.0,
-					))
-				}
-				sink.append(SamplesBuffer::new(2, md.sample_rate, samples.as_slice()));
-				index = 0;
-			}
-		}
-		sink.sleep_until_end()
+		std::thread::sleep(Duration::from_secs_f32(0.05))
 	}
 }

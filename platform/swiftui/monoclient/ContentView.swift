@@ -20,14 +20,14 @@ class MonoLib {
         } catch {
             print("Failed to set the audio session configuration")
         }
-        start(server)
+        c_start(server)
     }
 }
 
 struct ContentView: View {
     let timer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
-    @State private var server: String = ""
-    @State private var port: String = ""
+    @State private var server: String = "ivabus.dev"
+    @State private var port: String = "5894"
     @State private var playing: Bool = true
     @State private var running: Bool = false
 
@@ -62,7 +62,7 @@ struct ContentView: View {
                 Button(action: {
                     if running {
                         playing = !playing
-                        toggle()
+                        c_toggle()
                     }
                     running = true
                     let a = MonoLib()
@@ -76,23 +76,35 @@ struct ContentView: View {
                     ).font(.largeTitle)
                 }.buttonStyle(
                     .borderedProminent)
-                Button(action: {
-                    reset()
-                    running = false
-                    playing = true
-                }) { Image(systemName: "stop").font(.title3) }.buttonStyle(
-                    .bordered
-                ).disabled(!running)
+                HStack{
+                    Button(action: {
+                        c_stop()
+                        running = false
+                        playing = true
+                    }) { Image(systemName: "stop").font(.title3) }.buttonStyle(
+                        .bordered
+                    ).disabled(!running)
+                    Button(action: {
+                            c_stop()
+                        playing = true
+                        let a = MonoLib()
+                        Task.init {
+                            await a.run(server: server + ":" + port)
+                        }
+                    }) {Image(systemName: "forward").font(.title3)}.buttonStyle(.bordered).disabled(!running)
+                }
             }.frame(width: 300)
-            Text(now_playing_artist).font(.title2).onReceive(timer) { _ in
-                now_playing_artist = String(cString: get_metadata_artist()!)
-            }
-            Text(now_playing_album).onReceive(timer) { _ in
-                now_playing_album = String(cString: get_metadata_album()!)
-            }
-            Text(now_playing_title).font(.title).bold().onReceive(timer) { _ in
-                now_playing_title = String(cString: get_metadata_title()!)
-            }
+            VStack(spacing: 10) {
+                Text(now_playing_artist).onReceive(timer) { _ in
+                    now_playing_artist = String(cString: c_get_metadata_artist()!)
+                }
+                Text(now_playing_album).onReceive(timer) { _ in
+                    now_playing_album = String(cString: c_get_metadata_album()!)
+                }
+                Text(now_playing_title).onReceive(timer) { _ in
+                    now_playing_title = String(cString: c_get_metadata_title()!)
+                }.bold()
+            }.frame(minHeight: 100)
 
         }.padding()
 

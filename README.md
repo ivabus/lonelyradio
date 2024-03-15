@@ -22,7 +22,7 @@ All files (recursively) will be shuffled and played back. Public log will be dis
 
 ### Clients
 
-[monoclient](./monoclient) is a recommended client for lonelyradio
+[monoclient](./monoclient) is a recommended CLI client for lonelyradio that uses [monolib](./monolib)
 
 ```shell
 monoclient <SERVER>:<PORT>
@@ -31,6 +31,8 @@ monoclient <SERVER>:<PORT>
 ### Other clients
 
 SwiftUI client is availible in [platform](./platform) directory.
+
+[monolib](./monolib) provides lonelyradio-compatible C API for creating custom clients.
 
 ## License
 
