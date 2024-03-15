@@ -6,6 +6,12 @@ Radio that uses unencrypted TCP socket for broadcasting tagged audio data.
 
 Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia).
 
+## Install
+
+```shell
+cargo install lonelyradio
+```
+
 ## Build
 
 ```shell
@@ -36,4 +42,4 @@ SwiftUI client is availible in [platform](./platform) directory.
 
 ## License
 
-lonelyradio and monoclient are licensed under the terms of the [MIT license](./LICENSE).
+lonelyradio, monolib and monoclient are licensed under the terms of the [MIT license](./LICENSE).

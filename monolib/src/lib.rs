@@ -1,3 +1,19 @@
+//! A library implementing the lonely radio audio streaming protocol
+//!
+//! Example usage (play for 10 seconds):
+//! ```rust
+//! extern crate monolib;
+//! use std::thread::{sleep, spawn};
+//! use std::time::Duration;
+//!
+//! spawn(|| monolib::run("someserver:someport"));
+//! while monolib::get_metadata().is_none() {}
+//! let seconds = md.length / md.sample_rate as u64 / 2;
+//! println!("Playing: {} - {} - {} ({}:{:02})", md.artist, md.album, md.title, seconds / 60, seconds % 60);
+//! sleep(Duration::from_secs(10));
+//! monolib::stop();
+//!```
+
 /// Functions, providing C-like API
 pub mod c;
 

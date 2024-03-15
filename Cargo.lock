@@ -597,7 +597,7 @@ checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
 name = "lonelyradio"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "clap",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "monoclient"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "clap",
  "monolib",
@@ -661,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "monolib"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "byteorder",
  "rmp-serde",

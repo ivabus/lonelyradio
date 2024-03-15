@@ -26,8 +26,8 @@ class MonoLib {
 
 struct ContentView: View {
     let timer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
-    @State private var server: String = "ivabus.dev"
-    @State private var port: String = "5894"
+    @State private var server: String = ""
+    @State private var port: String = ""
     @State private var playing: Bool = true
     @State private var running: Bool = false
 
