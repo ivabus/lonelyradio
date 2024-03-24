@@ -26,7 +26,7 @@ use std::net::TcpStream;
 use std::sync::RwLock;
 use std::time::Instant;
 
-const CACHE_SIZE: usize = 50;
+const CACHE_SIZE: usize = 500;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 static MD: RwLock<Option<Metadata>> = RwLock::new(None);
