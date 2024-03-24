@@ -26,10 +26,7 @@ use std::net::TcpStream;
 use std::sync::RwLock;
 use std::time::Instant;
 
-// How many samples to cache before playing in samples (both channels) SHOULD BE EVEN
-const BUFFER_SIZE: usize = 4800;
-// How many buffers to cache
-const CACHE_SIZE: usize = 160;
+const CACHE_SIZE: usize = 50;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 static MD: RwLock<Option<Metadata>> = RwLock::new(None);
@@ -48,8 +45,13 @@ pub enum State {
 /// Track metadata
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Metadata {
-	/// In samples, length / (sample_rate * 2 (channels)) = length in seconds
+	/// Fragment length
 	pub length: u64,
+	/// Total track length
+	pub track_length_secs: u64,
+	pub track_length_frac: f32,
+	pub channels: u16,
+	// Yep, no more interpolation
 	pub sample_rate: u32,
 	pub title: String,
 	pub album: String,
@@ -147,9 +149,8 @@ pub fn run(server: &str) {
 	drop(sink);
 
 	let mut buffer = [0u8; 2];
-	let mut samples = [0f32; BUFFER_SIZE];
+	let mut samples = Vec::with_capacity(8192);
 	loop {
-		let mut index = 0usize;
 		let recv_md: Metadata =
 			rmp_serde::from_read(&stream).expect("Failed to parse track metadata");
 
@@ -168,35 +169,35 @@ pub fn run(server: &str) {
 			if stream.read_exact(&mut buffer).is_err() {
 				return;
 			};
-
-			samples[index] = byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0;
-			index += 1;
-
-			if index == BUFFER_SIZE {
-				// Sink's thread is detached from main thread, so we need to synchronize with it
-				// Why we should synchronize with it?
-				// Let's say, that if we don't synchronize with it, we would have
-				// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
-				let sink = SINK.read().unwrap();
-				if let Some(sink) = sink.as_ref() {
-					while sink.len() >= CACHE_SIZE {
-						// Sleeping exactly one buffer and watching for reset signal
-						if watching_sleep(
-							if sink.len() > 2 {
-								sink.len() as f32 - 2.0
-							} else {
-								0.5
-							} * BUFFER_SIZE as f32 / recv_md.sample_rate as f32
-								/ 2.0,
-						) {
-							_stop();
-							return;
-						}
-					}
-					sink.append(SamplesBuffer::new(2, recv_md.sample_rate, samples.as_slice()));
-					index = 0;
+			samples.push(byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0);
+		}
+		// Sink's thread is detached from main thread, so we need to synchronize with it
+		// Why we should synchronize with it?
+		// Let's say, that if we don't synchronize with it, we would have
+		// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
+		let sink = SINK.read().unwrap();
+		if let Some(sink) = sink.as_ref() {
+			while sink.len() >= CACHE_SIZE {
+				// Sleeping exactly one buffer and watching for reset signal
+				if watching_sleep(
+					if sink.len() > 2 {
+						sink.len() as f32 - 2.0
+					} else {
+						0.25
+					} * recv_md.length as f32
+						/ recv_md.sample_rate as f32
+						/ 2.0,
+				) {
+					_stop();
+					return;
 				}
 			}
+			sink.append(SamplesBuffer::new(
+				recv_md.channels,
+				recv_md.sample_rate,
+				samples.as_slice(),
+			));
+			samples.clear();
 		}
 	}
 }
