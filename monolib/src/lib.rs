@@ -16,20 +16,21 @@
 
 /// Functions, providing C-like API
 pub mod c;
+mod reader;
 
-use byteorder::ByteOrder;
+use byteorder::{LittleEndian, ReadBytesExt};
+use lonelyradio_types::{Message, TrackMetadata};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
-use serde::Deserialize;
-use std::io::Read;
+use std::io::BufReader;
 use std::net::TcpStream;
 use std::sync::RwLock;
 use std::time::Instant;
 
-const CACHE_SIZE: usize = 500;
+const CACHE_SIZE: usize = 32;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
-static MD: RwLock<Option<Metadata>> = RwLock::new(None);
+static MD: RwLock<Option<TrackMetadata>> = RwLock::new(None);
 static STATE: RwLock<State> = RwLock::new(State::NotStarted);
 
 /// Player state
@@ -40,22 +41,6 @@ pub enum State {
 	Resetting = 1,
 	Playing = 2,
 	Paused = 3,
-}
-
-/// Track metadata
-#[derive(Deserialize, Clone, Debug, PartialEq)]
-pub struct Metadata {
-	/// Fragment length
-	pub length: u64,
-	/// Total track length
-	pub track_length_secs: u64,
-	pub track_length_frac: f32,
-	pub channels: u16,
-	// Yep, no more interpolation
-	pub sample_rate: u32,
-	pub title: String,
-	pub album: String,
-	pub artist: String,
 }
 
 /// Play/pauses playback
@@ -81,6 +66,9 @@ pub fn toggle() {
 /// Stops playback
 pub fn stop() {
 	let mut state = STATE.write().unwrap();
+	if *state == State::NotStarted {
+		return;
+	}
 	*state = State::Resetting;
 
 	let sink = SINK.read().unwrap();
@@ -99,7 +87,7 @@ pub fn get_state() -> State {
 	*STATE.read().unwrap()
 }
 
-pub fn get_metadata() -> Option<Metadata> {
+pub fn get_metadata() -> Option<TrackMetadata> {
 	MD.read().unwrap().clone()
 }
 
@@ -130,8 +118,37 @@ fn watching_sleep(dur: f32) -> bool {
 	false
 }
 
+/// Download track as samples
+pub fn get_track(server: &str, xor_key: Option<Vec<u8>>) -> Option<(TrackMetadata, Vec<i16>)> {
+	let mut stream = BufReader::new(match xor_key {
+		Some(k) => reader::Reader::XorEncrypted(TcpStream::connect(server).unwrap(), k, 0),
+		None => reader::Reader::Unencrypted(TcpStream::connect(server).unwrap()),
+	});
+
+	let mut samples = vec![];
+	let mut md: Option<TrackMetadata> = None;
+	loop {
+		let recv_md: Message = rmp_serde::from_read(&mut stream).expect("Failed to parse message");
+		match recv_md {
+			Message::T(tmd) => {
+				if md.is_some() {
+					break;
+				}
+				md = Some(tmd);
+			}
+			Message::F(fmd) => {
+				let mut buf = vec![0; fmd.length as usize];
+				stream.read_i16_into::<LittleEndian>(&mut buf).unwrap();
+				samples.append(&mut buf);
+			}
+		}
+	}
+
+	md.map(|md| (md, samples))
+}
+
 /// Starts playing at "server:port"
-pub fn run(server: &str) {
+pub fn run(server: &str, xor_key: Option<Vec<u8>>) {
 	let mut state = STATE.write().unwrap();
 	if *state == State::Playing || *state == State::Paused {
 		return;
@@ -139,7 +156,11 @@ pub fn run(server: &str) {
 	*state = State::Playing;
 	drop(state);
 
-	let mut stream = TcpStream::connect(server).unwrap();
+	let mut stream = BufReader::new(match xor_key {
+		Some(k) => reader::Reader::XorEncrypted(TcpStream::connect(server).unwrap(), k, 0),
+		None => reader::Reader::Unencrypted(TcpStream::connect(server).unwrap()),
+	});
+
 	let mut sink = SINK.write().unwrap();
 	let (_stream, stream_handle) = OutputStream::try_default().unwrap();
 
@@ -148,56 +169,60 @@ pub fn run(server: &str) {
 	*sink = Some(audio_sink);
 	drop(sink);
 
-	let mut buffer = [0u8; 2];
 	let mut samples = Vec::with_capacity(8192);
 	loop {
-		let recv_md: Metadata =
-			rmp_serde::from_read(&stream).expect("Failed to parse track metadata");
-
-		let mut md = MD.write().unwrap();
-		*md = Some(recv_md.clone());
-		drop(md);
-		for _ in 0..recv_md.length {
-			while *STATE.read().unwrap() == State::Paused {
-				std::thread::sleep(std::time::Duration::from_secs_f32(0.25))
+		let recv_md: Message = rmp_serde::from_read(&mut stream).expect("Failed to parse message");
+		match recv_md {
+			Message::T(tmd) => {
+				let mut md = MD.write().unwrap();
+				*md = Some(tmd.clone());
 			}
-			if *STATE.read().unwrap() == State::Resetting {
-				_stop();
-				return;
-			}
-
-			if stream.read_exact(&mut buffer).is_err() {
-				return;
-			};
-			samples.push(byteorder::LittleEndian::read_i16(&buffer[..2]) as f32 / 32768.0);
-		}
-		// Sink's thread is detached from main thread, so we need to synchronize with it
-		// Why we should synchronize with it?
-		// Let's say, that if we don't synchronize with it, we would have
-		// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
-		let sink = SINK.read().unwrap();
-		if let Some(sink) = sink.as_ref() {
-			while sink.len() >= CACHE_SIZE {
-				// Sleeping exactly one buffer and watching for reset signal
-				if watching_sleep(
-					if sink.len() > 2 {
-						sink.len() as f32 - 2.0
-					} else {
-						0.25
-					} * recv_md.length as f32
-						/ recv_md.sample_rate as f32
-						/ 2.0,
-				) {
+			Message::F(fmd) => {
+				while *STATE.read().unwrap() == State::Paused {
+					std::thread::sleep(std::time::Duration::from_secs_f32(0.25))
+				}
+				if *STATE.read().unwrap() == State::Resetting {
 					_stop();
 					return;
 				}
+				let mut samples_i16 = vec![0; fmd.length as usize];
+				if stream.read_i16_into::<LittleEndian>(&mut samples_i16).is_err() {
+					return;
+				};
+				samples.append(
+					&mut samples_i16.iter().map(|sample| *sample as f32 / 32767.0).collect(),
+				);
+
+				// Sink's thread is detached from main thread, so we need to synchronize with it
+				// Why we should synchronize with it?
+				// Let's say, that if we don't synchronize with it, we would have
+				// a lot (no upper limit, actualy) of buffered sound, waiting for playing in sink
+				let sink = SINK.read().unwrap();
+				let md = MD.read().unwrap();
+				let md = md.as_ref().unwrap();
+				if let Some(sink) = sink.as_ref() {
+					while sink.len() >= CACHE_SIZE {
+						// Sleeping exactly one buffer and watching for reset signal
+						if watching_sleep(
+							if sink.len() > 2 {
+								sink.len() as f32 - 2.0
+							} else {
+								0.25
+							} * fmd.length as f32 / md.sample_rate as f32
+								/ 4.0,
+						) {
+							_stop();
+							return;
+						}
+					}
+					sink.append(SamplesBuffer::new(
+						md.channels,
+						md.sample_rate,
+						samples.as_slice(),
+					));
+					samples.clear();
+				}
 			}
-			sink.append(SamplesBuffer::new(
-				recv_md.channels,
-				recv_md.sample_rate,
-				samples.as_slice(),
-			));
-			samples.clear();
 		}
 	}
 }

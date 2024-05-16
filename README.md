@@ -21,10 +21,12 @@ cargo build -r
 ## Run
 
 ```
-lonelyradio [-a <ADDRESS:PORT>] <MUSIC_FOLDER> [-p] [-w]
+lonelyradio <MUSIC_FOLDER> [-a <ADDRESS:PORT>] [-p] [-w] [-m|--max-samplerate M]
 ```
 
 All files (recursively) will be shuffled and played back. Public log will be displayed to stdout, private to stderr.
+
+`-m|--max-samplerate M` will resample tracks which samplerate exceeds M to M
 
 ### Clients
 
