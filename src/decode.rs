@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use async_stream::stream;
 use clap::Parser;
+use futures_util::Stream;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::io::MediaSourceStream;
@@ -75,7 +77,7 @@ pub async fn get_meta(file_path: &Path) -> (u16, u32, Time) {
 }
 
 /// Getting samples
-pub async fn decode_file(file_path: PathBuf, tx: tokio::sync::mpsc::Sender<Vec<i16>>) {
+pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 	let args = Args::parse();
 	let file = Box::new(std::fs::File::open(&file_path).unwrap());
 	let mut hint = Hint::new();
@@ -102,50 +104,51 @@ pub async fn decode_file(file_path: PathBuf, tx: tokio::sync::mpsc::Sender<Vec<i
 		.make(&track.codec_params, &Default::default())
 		.expect("unsupported codec");
 	let track_id = track.id;
-	loop {
-		let packet = match format.next_packet() {
-			Ok(packet) => packet,
-			_ => break,
-		};
+	stream! {
+		loop {
+			let packet = match format.next_packet() {
+				Ok(packet) => packet,
+				_ => break,
+			};
 
-		if packet.track_id() != track_id {
-			continue;
-		}
-
-		match decoder.decode(&packet) {
-			Ok(decoded) => {
-				if decoded.spec().rate > args.max_samplerate {
-					let spec = *decoded.spec();
-					let mut byte_buf =
-						SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
-					byte_buf.copy_interleaved_ref(decoded);
-
-					tx.send(
-						samplerate::convert(
-							spec.rate,
-							args.max_samplerate,
-							spec.channels.count(),
-							samplerate::ConverterType::Linear,
-							byte_buf.samples(),
-						)
-						.unwrap()
-						.iter()
-						.map(|x| (*x * 32767.0) as i16)
-						.collect(),
-					)
-					.await
-					.unwrap();
-				} else {
-					let mut byte_buf =
-						SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
-					byte_buf.copy_interleaved_ref(decoded);
-					tx.send(byte_buf.samples().to_vec()).await.unwrap();
-				}
+			if packet.track_id() != track_id {
 				continue;
 			}
-			_ => {
-				// Handling any error as track skip
-				continue;
+
+			match decoder.decode(&packet) {
+				Ok(decoded) => {
+					if decoded.spec().rate > args.max_samplerate {
+						let spec = *decoded.spec();
+						let mut byte_buf =
+							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+						byte_buf.copy_interleaved_ref(decoded);
+
+						// About Samplerate struct:
+						// We are downsampling, not upsampling, so we should be fine
+						yield (samplerate::convert(
+								spec.rate,
+								args.max_samplerate,
+								spec.channels.count(),
+								samplerate::ConverterType::Linear,
+								byte_buf.samples(),
+							)
+							.unwrap()
+							.iter()
+							.map(|x| (*x * 32768.0) as i16)
+							.collect());
+
+					} else {
+						let mut byte_buf =
+							SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
+						byte_buf.copy_interleaved_ref(decoded);
+						yield (byte_buf.samples().to_vec());
+					}
+					continue;
+				}
+				_ => {
+					// Handling any error as track skip
+					continue;
+				}
 			}
 		}
 	}

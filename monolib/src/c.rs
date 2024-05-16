@@ -7,10 +7,13 @@ use std::ffi::{CStr, CString};
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn c_start(server: *const c_char) {
 	let serv = unsafe { CStr::from_ptr(server) };
-	run(match serv.to_str() {
-		Ok(s) => s,
-		_ => "",
-	})
+	run(
+		match serv.to_str() {
+			Ok(s) => s,
+			_ => "",
+		},
+		None,
+	)
 }
 
 #[no_mangle]
@@ -69,7 +72,7 @@ pub extern "C" fn c_get_metadata_title() -> *mut c_char {
 pub extern "C" fn c_get_metadata_length() -> *mut c_float {
 	let md = MD.read().unwrap();
 	match md.as_ref() {
-		Some(md) => &mut (md.length as c_float / md.sample_rate as c_float),
+		Some(md) => &mut (md.track_length_secs as c_float + md.track_length_frac as c_float),
 		None => &mut 0.0,
 	}
 }

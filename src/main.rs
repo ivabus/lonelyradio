@@ -1,4 +1,5 @@
 mod decode;
+mod writer;
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -9,16 +10,17 @@ use clap::Parser;
 use futures_util::pin_mut;
 use lofty::Accessor;
 use lofty::TaggedFileExt;
+use lonelyradio_types::{FragmentMetadata, Message, TrackMetadata};
+use once_cell::sync::Lazy;
 use rand::prelude::*;
-use serde::Serialize;
-use tokio::io::AsyncWriteExt;
+use std::io::Write;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use walkdir::DirEntry;
+use writer::Writer;
 
-use crate::decode::decode_file;
+use crate::decode::decode_file_stream;
 use crate::decode::get_meta;
 
 #[derive(Parser)]
@@ -35,50 +37,58 @@ struct Args {
 
 	#[arg(short, long, default_value = "96000")]
 	max_samplerate: u32,
+
+	#[arg(long)]
+	xor_key_file: Option<PathBuf>,
 }
 
-#[derive(Serialize, Clone)]
-struct SentMetadata {
-	/// Fragment length
-	length: u64,
-	/// Total track length
-	track_length_secs: u64,
-	track_length_frac: f32,
-	channels: u16,
-	sample_rate: u32,
-	title: String,
-	album: String,
-	artist: String,
-}
+static KEY: Lazy<Option<Arc<Vec<u8>>>> = Lazy::new(|| {
+	let args = Args::parse();
+	if let Some(path) = args.xor_key_file {
+		let key = std::fs::read(path).expect("Failed to read preshared key");
+		Some(Arc::new(key))
+	} else {
+		None
+	}
+});
 
-async fn stream_samples(
+async fn stream_track(
 	samples_stream: impl Stream<Item = Vec<i16>>,
 	war: bool,
-	md: SentMetadata,
-	s: &mut TcpStream,
+	md: TrackMetadata,
+	s: &mut Writer,
 ) -> bool {
 	pin_mut!(samples_stream);
 
-	while let Some(samples) = samples_stream.next().await {
-		let mut md = md.clone();
-		md.length = samples.len() as u64;
-		if s.write_all(rmp_serde::to_vec(&md).unwrap().as_slice()).await.is_err() {
+	if s.write_all(rmp_serde::to_vec(&Message::T(md)).unwrap().as_slice()).is_err() {
+		return true;
+	};
+
+	while let Some(mut _samples) = samples_stream.next().await {
+		let md = Message::F(FragmentMetadata {
+			length: _samples.len() as u64,
+		});
+		if s.write_all(rmp_serde::to_vec(&md).unwrap().as_slice()).is_err() {
 			return true;
 		}
-		for sample in samples {
-			if s.write_all(
-				&(if war {
-					sample.signum() * 32767
-				} else {
-					sample
-				}
-				.to_le_bytes()),
-			)
-			.await
-			.is_err()
-			{
-				return true;
-			};
+
+		if war {
+			_samples.iter_mut().for_each(|sample| {
+				*sample = sample.signum() * 32767;
+			});
+		}
+		// Launching lonelyradio on the router moment
+		if cfg!(target_endian = "big") {
+			_samples.iter_mut().for_each(|sample| {
+				*sample = sample.to_le();
+			});
+		}
+
+		// Sowwy about that
+		let (_, samples, _) = unsafe { _samples.align_to::<u8>() };
+
+		if s.write_all(samples).is_err() {
+			return true;
 		}
 	}
 	false
@@ -117,10 +127,24 @@ fn track_valid(track: &Path) -> bool {
 	true
 }
 
-async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
+async fn stream(s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 	let args = Args::parse();
-	s.set_nodelay(true).unwrap();
-
+	let s = s.into_std().unwrap();
+	s.set_nonblocking(false).unwrap();
+	let mut s = if args.xor_key_file.is_some() {
+		Writer::XorEncrypted(
+			s,
+			match &*KEY {
+				Some(a) => a.clone(),
+				_ => {
+					unreachable!()
+				}
+			},
+			0,
+		)
+	} else {
+		Writer::Unencrypted(s)
+	};
 	loop {
 		let track = tracklist.choose(&mut thread_rng()).unwrap().clone();
 
@@ -163,23 +187,16 @@ async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>) {
 			);
 		}
 		let (channels, sample_rate, time) = get_meta(track.as_path()).await;
-		let (tx, mut rx) = mpsc::channel::<Vec<i16>>(8192);
-		tokio::spawn(decode_file(track, tx));
-		let stream = async_stream::stream! {
-			while let Some(item) = rx.recv().await {
-				yield item;
-			}
-		};
-		if stream_samples(
+		let stream = decode_file_stream(track);
+		if stream_track(
 			stream,
 			args.war,
-			SentMetadata {
+			TrackMetadata {
+				track_length_frac: time.frac as f32,
+				track_length_secs: time.seconds,
 				album,
 				artist,
 				title,
-				length: 0,
-				track_length_frac: time.frac as f32,
-				track_length_secs: time.seconds,
 				sample_rate,
 				channels,
 			},
