@@ -1,10 +1,11 @@
 use clap::Parser;
 use crossterm::cursor::MoveToColumn;
+use crossterm::event::{poll, read, Event};
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use std::io::{stdout, IsTerminal};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Parser)]
 struct Args {
@@ -46,7 +47,25 @@ fn main() {
 	.unwrap();
 	let mut track_length = md.track_length_secs as f64 + md.track_length_frac as f64;
 	let mut next_md = md.clone();
+	crossterm::terminal::enable_raw_mode().unwrap();
 	loop {
+		if let Ok(true) = poll(std::time::Duration::from_micros(1)) {
+			if let Event::Key(event) = read().unwrap() {
+				match event.code {
+					crossterm::event::KeyCode::Up => {
+						monolib::set_volume(monolib::get_volume().saturating_add(16));
+					}
+					crossterm::event::KeyCode::Down => {
+						monolib::set_volume(monolib::get_volume().saturating_sub(16));
+					}
+					crossterm::event::KeyCode::Char('q') => {
+						crossterm::terminal::disable_raw_mode().unwrap();
+						std::process::exit(0)
+					}
+					_ => {}
+				}
+			}
+		}
 		if monolib::get_metadata().unwrap() != md
 			&& track_length <= (Instant::now() - track_start).as_secs_f64()
 		{
@@ -84,6 +103,6 @@ fn main() {
 			)
 			.unwrap();
 		}
-		std::thread::sleep(Duration::from_secs_f32(0.25))
+		//std::thread::sleep(Duration::from_secs_f32(0.25))
 	}
 }

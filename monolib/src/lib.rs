@@ -24,12 +24,14 @@ use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use std::io::BufReader;
 use std::net::TcpStream;
+use std::sync::atomic::AtomicU8;
 use std::sync::RwLock;
 use std::time::Instant;
 
-const CACHE_SIZE: usize = 32;
+const CACHE_SIZE: usize = 128;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
+static VOLUME: AtomicU8 = AtomicU8::new(255);
 static MD: RwLock<Option<TrackMetadata>> = RwLock::new(None);
 static STATE: RwLock<State> = RwLock::new(State::NotStarted);
 
@@ -116,6 +118,18 @@ fn watching_sleep(dur: f32) -> bool {
 		}
 	}
 	false
+}
+
+pub fn get_volume() -> u8 {
+	VOLUME.load(std::sync::atomic::Ordering::Acquire)
+}
+
+pub fn set_volume(volume: u8) {
+	let sink = SINK.read().unwrap();
+	if let Some(sink) = sink.as_ref() {
+		sink.set_volume(get_volume() as f32 / 255.0)
+	}
+	VOLUME.store(volume, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Download track as samples
