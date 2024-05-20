@@ -20,7 +20,79 @@ struct Args {
 	xor_key_file: Option<PathBuf>,
 }
 
-fn main() {
+#[cfg(target_os = "linux")]
+async fn mpris() {
+	use mpris_server::{Metadata, Time, Volume};
+
+	let player = mpris_server::Player::builder("org.mpris.MediaPlayer2.monoclient")
+		.identity("monoclient")
+		.can_pause(true)
+		.build()
+		.await;
+	let player = match player {
+		Ok(p) => p,
+		Err(_) => {
+			return;
+		}
+	};
+	player.connect_play_pause(|x| {
+		monolib::toggle();
+		async_std::task::block_on(x.set_playback_status(
+			if monolib::get_state() == monolib::State::Playing {
+				mpris_server::PlaybackStatus::Playing
+			} else {
+				mpris_server::PlaybackStatus::Paused
+			},
+		))
+		.unwrap();
+	});
+	player.connect_set_volume(|_, v: Volume| monolib::set_volume(((v * 255.0) % 256.0) as u8));
+	let mut md = monolib::get_metadata().unwrap();
+	let mut vol = monolib::get_volume();
+	player
+		.set_metadata(
+			Metadata::builder()
+				.artist(vec![&md.artist])
+				.album(&md.album)
+				.title(&md.title)
+				.length(Time::from_secs(md.track_length_secs as i64))
+				.build(),
+		)
+		.await
+		.unwrap();
+	async_std::task::spawn_local(player.run());
+	player.set_can_play(false).await.unwrap();
+	player.set_playback_status(mpris_server::PlaybackStatus::Playing).await.unwrap();
+	loop {
+		let nmd = monolib::get_metadata().unwrap();
+		let nvol = monolib::get_volume();
+		if nmd != md {
+			md = nmd;
+			player
+				.set_metadata(
+					Metadata::builder()
+						.artist(vec![&md.artist])
+						.album(&md.album)
+						.title(&md.title)
+						.length(Time::from_secs(md.track_length_secs as i64))
+						.build(),
+				)
+				.await
+				.unwrap();
+		}
+		if nvol != vol {
+			vol = nvol;
+			player.set_volume(vol as f64 / 255.0).await.unwrap();
+		}
+		std::thread::sleep(std::time::Duration::from_secs(1))
+	}
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn mpris() {}
+
+#[async_std::main]
+async fn main() {
 	let mut args = Args::parse();
 	args.no_backspace |= !std::io::stdout().is_terminal();
 	std::thread::spawn(move || {
@@ -31,6 +103,7 @@ fn main() {
 	});
 	while monolib::get_metadata().is_none() {}
 	let mut md = monolib::get_metadata().unwrap();
+	async_std::task::spawn_local(mpris());
 	let mut track_start = Instant::now();
 	let mut seconds_past = 0;
 	crossterm::execute!(

@@ -8,3 +8,5 @@ license = "MIT"
 monolib = { path = "../monolib" }
 clap = { version = "4.4.18", features = ["derive"] }
 crossterm = "0.27.0"
+mpris-server = "0.8.0"
+async-std = {version = "1.12.0", features = ["attributes", "unstable"]}

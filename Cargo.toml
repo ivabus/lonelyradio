@@ -4,7 +4,6 @@ members = [
     "monoclient",
     "monolib",
     "monoloader",
-    "platform/gtk",
 ]
 
 [package]
