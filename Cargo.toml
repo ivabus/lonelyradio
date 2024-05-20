@@ -2,15 +2,16 @@
 members = [
     "lonelyradio_types",
     "monoclient",
+    "monoclient-s",
     "monolib",
     "monoloader",
-    "platform/gtk",
+    "microserve",
 ]
 
 [package]
 name = "lonelyradio"
 description = "TCP radio for lonely ones"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
@@ -42,8 +43,10 @@ async-stream = "0.3.5"
 tokio-stream = { version = "0.1.15", features = ["sync"] }
 futures-util = "0.3.30"
 samplerate = "0.2.4"
-lonelyradio_types = { path = "./lonelyradio_types" }
+lonelyradio_types = { version = "0.5.0", path = "./lonelyradio_types" }
 once_cell = "1.19.0"
+flacenc = { version = "0.4.0", default-features = false }
 
 [profile.release]
 opt-level = 3
+strip = true

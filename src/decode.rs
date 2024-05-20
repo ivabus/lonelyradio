@@ -101,7 +101,7 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 		.expect("no supported audio tracks");
 
 	let mut decoder = symphonia::default::get_codecs()
-		.make(&track.codec_params, &Default::default())
+		.make(track.codec_params.clone().with_max_frames_per_packet(65536), &Default::default())
 		.expect("unsupported codec");
 	let track_id = track.id;
 	stream! {
@@ -122,20 +122,27 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 						let mut byte_buf =
 							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 						byte_buf.copy_interleaved_ref(decoded);
+						let output_rate = get_resampling_rate(&spec.rate, &args.max_samplerate);
 
 						// About Samplerate struct:
 						// We are downsampling, not upsampling, so we should be fine
-						yield (samplerate::convert(
-								spec.rate,
-								args.max_samplerate,
-								spec.channels.count(),
-								samplerate::ConverterType::Linear,
-								byte_buf.samples(),
-							)
-							.unwrap()
-							.iter()
-							.map(|x| (*x * 32768.0) as i16)
-							.collect());
+						yield (
+							if output_rate == spec.rate {
+								byte_buf.samples().iter().map(|x| (*x * 32768.0) as i16).collect()
+							} else {
+								samplerate::convert(
+									spec.rate,
+									args.max_samplerate,
+									spec.channels.count(),
+									samplerate::ConverterType::Linear,
+									byte_buf.samples(),
+								)
+								.unwrap()
+								.iter()
+								.map(|x| (*x * 32768.0) as i16)
+								.collect()
+							}
+						);
 
 					} else {
 						let mut byte_buf =
@@ -151,5 +158,17 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 				}
 			}
 		}
+	}
+}
+
+fn get_resampling_rate(in_rate: &u32, max_samplerate: &u32) -> u32 {
+	if in_rate < max_samplerate {
+		*in_rate
+	} else if in_rate % 44100 == 0 {
+		max_samplerate - (max_samplerate % 44100)
+	} else if in_rate % 48000 == 0 {
+		max_samplerate - (max_samplerate % 48000)
+	} else {
+		*max_samplerate
 	}
 }

@@ -1,0 +1,19 @@
+[package]
+name = "monoclient-s"
+description = "Client for lonelyradio built with Slint"
+version = "0.5.0"
+edition = "2021"
+
+[dependencies]
+slint = { version = "1.6.0", features = ["backend-android-activity-06"] }
+monolib = { path = "../monolib" }
+
+
+# TODO: Set up cargo-bundle
+#[package.metadata.bundle]
+#name = "monoclient-s"
+#identifier = "dev.ivabus.monoclient-s"
+#icon = ["lonelyradio.png", "lonelyradio.icns"]
+#version = "0.5.0"
+#copyright = "Copyright (c) 2024 Ivan Bushchik."
+#category = "Music"

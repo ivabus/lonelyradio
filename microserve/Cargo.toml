@@ -1,0 +1,24 @@
+[package]
+name = "microserve"
+version = "0.5.0"
+license = "MIT"
+edition = "2021"
+authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
+repository = "https://github.com/ivabus/lonelyradio"
+
+
+[dependencies]
+cpal = "0.15.3"
+lonelyradio_types = { path = "../lonelyradio_types" }
+once_cell = "1.19.0"
+queues = "1.1.0"
+rmp-serde = "1.3.0"
+tokio = { version = "1.35.1", features = [
+    "sync",
+    "fs",
+    "io-util",
+    "net",
+    "rt-multi-thread",
+    "rt",
+    "macros",
+] }
