@@ -16,20 +16,20 @@
 
 /// Functions, providing C-like API
 pub mod c;
-mod reader;
 
-use byteorder::{LittleEndian, ReadBytesExt};
-use lonelyradio_types::{Message, TrackMetadata};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use lonelyradio_types::{Encoder, Message, ServerCapabilities, Settings, TrackMetadata};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use std::error::Error;
-use std::io::{BufReader, Read};
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::atomic::AtomicU8;
 use std::sync::RwLock;
 use std::time::Instant;
 
-const CACHE_SIZE: usize = 128;
+const CACHE_SIZE_PCM: usize = 32;
+const CACHE_SIZE_COMPRESSED: usize = 2;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 static VOLUME: AtomicU8 = AtomicU8::new(255);
@@ -76,7 +76,8 @@ pub fn stop() {
 
 	let sink = SINK.read().unwrap();
 	if let Some(sink) = sink.as_ref() {
-		sink.pause()
+		sink.pause();
+		sink.clear()
 	}
 	drop(sink);
 	drop(state);
@@ -143,12 +144,16 @@ pub fn set_volume(volume: u8) {
 }
 
 /// Download track as samples
-pub fn get_track(server: &str, xor_key: Option<Vec<u8>>) -> Option<(TrackMetadata, Vec<i16>)> {
-	let mut stream = BufReader::new(match xor_key {
-		Some(k) => reader::Reader::XorEncrypted(TcpStream::connect(server).unwrap(), k, 0),
-		None => reader::Reader::Unencrypted(TcpStream::connect(server).unwrap()),
-	});
+pub fn get_track(server: &str, mut settings: Settings) -> Option<(TrackMetadata, Vec<i16>)> {
+	let mut connection = unwrap(TcpStream::connect(server))?;
+	unwrap(connection.write_u64::<LittleEndian>(lonelyradio_types::HELLO_MAGIC))?;
+	let capabilities: ServerCapabilities = unwrap(rmp_serde::from_read(&mut connection))?;
+	if !capabilities.encoders.contains(&settings.encoder) {
+		settings.encoder = Encoder::Pcm16
+	}
+	unwrap(connection.write_all(&rmp_serde::to_vec_named(&settings).unwrap()))?;
 
+	let mut stream = connection;
 	let mut samples = vec![];
 	let mut md: Option<TrackMetadata> = None;
 	loop {
@@ -160,47 +165,59 @@ pub fn get_track(server: &str, xor_key: Option<Vec<u8>>) -> Option<(TrackMetadat
 				}
 				md = Some(tmd);
 			}
-			Message::F(fmd) => {
-				if !md.clone().unwrap().flac {
+			Message::F(fmd) => match md.as_ref().unwrap().encoder {
+				Encoder::Pcm16 => {
 					let mut buf = vec![0; fmd.length as usize];
 					stream.read_i16_into::<LittleEndian>(&mut buf).unwrap();
 					samples.append(&mut buf);
-				} else {
-					let take = stream.by_ref().take(fmd.length);
+				}
+				Encoder::PcmFloat => unimplemented!(),
+				Encoder::Flac => {
+					let take = std::io::Read::by_ref(&mut stream).take(fmd.length);
 					let mut reader = claxon::FlacReader::new(take).unwrap();
 					samples.append(
 						&mut reader.samples().map(|x| x.unwrap_or(0) as i16).collect::<Vec<i16>>(),
 					);
 				}
-			}
+			},
 		}
 	}
 	md.map(|md| (md, samples))
 }
 
-fn unwrap<T, E: Error>(thing: Result<T, E>) -> T {
+fn unwrap<T, E: Error>(thing: Result<T, E>) -> Option<T> {
 	if thing.is_err() {
 		*STATE.write().unwrap() = State::NotStarted;
 	}
-	thing.unwrap()
+	thing.ok()
 }
 
 /// Starts playing at "server:port"
-pub fn run(server: &str, xor_key: Option<Vec<u8>>) {
+pub fn run(server: &str, settings: Settings) {
+	let _ = _run(server, settings);
+}
+
+pub fn _run(server: &str, settings: Settings) -> Option<()> {
+	let mut settings = settings;
 	let mut state = STATE.write().unwrap();
 	if *state == State::Playing || *state == State::Paused {
-		return;
+		return None;
 	}
 	*state = State::Playing;
 	drop(state);
 
-	let mut stream = BufReader::new(match xor_key {
-		Some(k) => reader::Reader::XorEncrypted(unwrap(TcpStream::connect(server)), k, 0),
-		None => reader::Reader::Unencrypted(unwrap(TcpStream::connect(server))),
-	});
+	let mut connection = unwrap(TcpStream::connect(server))?;
+	unwrap(connection.write_u64::<LittleEndian>(lonelyradio_types::HELLO_MAGIC))?;
+	let capabilities: ServerCapabilities = unwrap(rmp_serde::from_read(&mut connection))?;
+	if !capabilities.encoders.contains(&settings.encoder) {
+		settings.encoder = Encoder::Pcm16
+	}
+	unwrap(connection.write_all(&rmp_serde::to_vec_named(&settings).unwrap()))?;
+
+	let mut stream = connection;
 
 	let mut sink = SINK.write().unwrap();
-	let (_stream, stream_handle) = unwrap(OutputStream::try_default());
+	let (_stream, stream_handle) = unwrap(OutputStream::try_default())?;
 
 	// Can't reuse old sink for some reason
 	let audio_sink = Sink::try_new(&stream_handle).unwrap();
@@ -215,7 +232,7 @@ pub fn run(server: &str, xor_key: Option<Vec<u8>>) {
 				// No metadata shift
 				if watching_sleep_until_end() {
 					_stop();
-					return;
+					return None;
 				}
 				let mut md = MD.write().unwrap();
 				*md = Some(tmd.clone());
@@ -227,49 +244,60 @@ pub fn run(server: &str, xor_key: Option<Vec<u8>>) {
 				}
 				if *STATE.read().unwrap() == State::Resetting {
 					_stop();
-					return;
+					return None;
 				}
-				if !MD.read().unwrap().clone().unwrap().flac {
-					let mut samples_i16 = vec![0; fmd.length as usize];
-					if stream.read_i16_into::<LittleEndian>(&mut samples_i16).is_err() {
-						return;
-					};
-					samples.append(
-						&mut samples_i16.iter().map(|sample| *sample as f32 / 32767.0).collect(),
-					);
-				} else {
-					let take = stream.by_ref().take(fmd.length);
-					let mut reader = claxon::FlacReader::new(take).unwrap();
-					samples.append(
-						&mut reader
-							.samples()
-							.map(|x| x.unwrap_or(0) as f32 / 32767.0)
-							.collect::<Vec<f32>>(),
-					);
-				}
+				match MD.read().unwrap().as_ref().unwrap().encoder {
+					Encoder::Pcm16 => {
+						let mut samples_i16 = vec![0; fmd.length as usize / 2];
+						if stream.read_i16_into::<LittleEndian>(&mut samples_i16).is_err() {
+							return None;
+						};
+						samples.append(
+							&mut samples_i16
+								.iter()
+								.map(|sample| *sample as f32 / 32767.0)
+								.collect(),
+						);
+					}
+					Encoder::PcmFloat => {
+						let mut samples_f32 = vec![0f32; fmd.length as usize / 4];
+						if stream.read_f32_into::<LittleEndian>(&mut samples_f32).is_err() {
+							return None;
+						};
+						samples.append(&mut samples_f32);
+					}
+					Encoder::Flac => {
+						let take = std::io::Read::by_ref(&mut stream).take(fmd.length);
+						let mut reader = claxon::FlacReader::new(take).unwrap();
+						samples.append(
+							&mut reader
+								.samples()
+								.map(|x| x.unwrap_or(0) as f32 / 32768.0 / 256.0)
+								.collect::<Vec<f32>>(),
+						);
+					}
+				};
 
-				// Sink's thread is detached from main thread, so we need to synchronize with it
-				// Why we should synchronize with it?
-				// Let's say, that if we don't synchronize with it, we would have
-				// a lot (no upper limit, actualy) of buffered sound, waiting for playing in
-				// sink
+				// Synchronizing with sink
 				let sink = SINK.read().unwrap();
 				let _md = MD.read().unwrap();
 				let md = _md.as_ref().unwrap().clone();
 				drop(_md);
 				if let Some(sink) = sink.as_ref() {
-					while sink.len() >= CACHE_SIZE {
+					while (sink.len() >= CACHE_SIZE_PCM && md.encoder != Encoder::Flac)
+						|| (sink.len() >= CACHE_SIZE_COMPRESSED && md.encoder == Encoder::Flac)
+					{
 						// Sleeping exactly one buffer and watching for reset signal
 						if watching_sleep(
 							if sink.len() > 2 {
 								sink.len() as f32 - 2.0
 							} else {
 								0.25
-							} * fmd.length as f32 / md.sample_rate as f32
+							} * samples.len() as f32 / md.sample_rate as f32
 								/ 4.0,
 						) {
 							_stop();
-							return;
+							return None;
 						}
 					}
 					sink.append(SamplesBuffer::new(

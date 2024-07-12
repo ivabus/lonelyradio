@@ -1,0 +1,12 @@
+
+language = "C"
+
+
+include_version = false
+
+############################ Code Style Options ################################
+
+braces = "SameLine"
+line_length = 100
+tab_width = 2
+line_endings = "LF"

@@ -39,7 +39,8 @@ async fn update_start() {
 async fn stream(mut s: std::net::TcpStream) {
 	println!("Playing for {}", s.peer_addr().unwrap());
 	let md = lonelyradio_types::Message::T(TrackMetadata {
-		flac: false,
+		cover: None,
+		encoder: lonelyradio_types::Encoder::Pcm,
 		track_length_secs: 0,
 		track_length_frac: 0.0,
 		channels: 1,

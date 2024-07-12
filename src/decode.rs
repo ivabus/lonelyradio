@@ -65,19 +65,11 @@ pub async fn get_meta(file_path: &Path) -> (u16, u32, Time) {
 	}
 	let args = Args::parse();
 
-	(
-		channels,
-		if sample_rate > args.max_samplerate {
-			args.max_samplerate
-		} else {
-			sample_rate
-		},
-		track_length,
-	)
+	(channels, get_resampling_rate(&sample_rate, &args.max_samplerate), track_length)
 }
 
 /// Getting samples
-pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
+pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<f32>> {
 	let args = Args::parse();
 	let file = Box::new(std::fs::File::open(&file_path).unwrap());
 	let mut hint = Hint::new();
@@ -122,13 +114,13 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 						let mut byte_buf =
 							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 						byte_buf.copy_interleaved_ref(decoded);
-						let output_rate = get_resampling_rate(&spec.rate, &args.max_samplerate);
+						let output_rate = get_resampling_rate(&spec.rate,&args.max_samplerate);
 
 						// About Samplerate struct:
 						// We are downsampling, not upsampling, so we should be fine
 						yield (
 							if output_rate == spec.rate {
-								byte_buf.samples().iter().map(|x| (*x * 32768.0) as i16).collect()
+								byte_buf.samples().to_vec()
 							} else {
 								samplerate::convert(
 									spec.rate,
@@ -138,17 +130,14 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<i16>> {
 									byte_buf.samples(),
 								)
 								.unwrap()
-								.iter()
-								.map(|x| (*x * 32768.0) as i16)
-								.collect()
 							}
 						);
 
 					} else {
 						let mut byte_buf =
-							SampleBuffer::<i16>::new(decoded.capacity() as u64, *decoded.spec());
+							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 						byte_buf.copy_interleaved_ref(decoded);
-						yield (byte_buf.samples().to_vec());
+						yield byte_buf.samples().to_vec();
 					}
 					continue;
 				}

@@ -1,6 +1,6 @@
 [package]
 name = "monolib"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "MIT"
 description = "A library implementing the lonely radio audio streaming protocol"
@@ -9,11 +9,19 @@ authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 
 [lib]
 name = "monolib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 rodio = { version = "0.17.3", default-features = false }
 byteorder = "1.5.0"
 rmp-serde = "1.1.2"
-lonelyradio_types = { version = "0.5.0", path = "../lonelyradio_types" }
+lonelyradio_types = { version = "0.6.0", path = "../lonelyradio_types" }
 claxon = "0.4.3"
+
+[package.metadata.xcframework]
+include-dir = "src"
+lib-type = "cdylib"
+zip = false
+macOS = true
+iOS = true
+simulators = true

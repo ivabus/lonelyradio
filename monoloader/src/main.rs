@@ -1,4 +1,5 @@
 use clap::Parser;
+use lonelyradio_types::Settings;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -14,7 +15,10 @@ fn main() {
 	let args = Args::parse();
 	let (md, samples) = monolib::get_track(
 		&args.address,
-		args.xor_key_file.map(|key| std::fs::read(key).expect("Failed to read preshared key")),
+		Settings {
+			encoder: lonelyradio_types::Encoder::Pcm16,
+			cover: -1,
+		},
 	)
 	.unwrap();
 	println!(

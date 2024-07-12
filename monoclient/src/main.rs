@@ -3,9 +3,13 @@ use crossterm::cursor::MoveToColumn;
 use crossterm::event::{poll, read, Event};
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
+use lonelyradio_types::{Encoder, Settings};
 use std::io::stdout;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::time::Instant;
+
+static VERBOSE: OnceLock<bool> = OnceLock::new();
 
 #[derive(Parser)]
 struct Args {
@@ -14,6 +18,9 @@ struct Args {
 
 	#[arg(long)]
 	xor_key_file: Option<PathBuf>,
+
+	#[arg(short, long)]
+	verbose: bool,
 }
 
 const HELP: &str = r#"Keybinds:
@@ -22,16 +29,31 @@ const HELP: &str = r#"Keybinds:
   Q    - Quit monoclient
   H    - Show this help"#;
 
+macro_rules! verbose {
+    ($($arg:tt)*) => {{
+    	if *VERBOSE.get().unwrap() {
+	    	crossterm::execute!(stdout(), Clear(ClearType::CurrentLine), MoveToColumn(0)).unwrap();
+	        println!("{}", format_args!($($arg)*));
+	        crossterm::execute!(stdout(), Clear(ClearType::CurrentLine), MoveToColumn(0)).unwrap();
+	     }
+    }};
+}
 fn main() {
 	let args = Args::parse();
+	VERBOSE.set(args.verbose).unwrap();
 	std::thread::spawn(move || {
 		monolib::run(
 			&args.address,
 			args.xor_key_file.map(|key| std::fs::read(key).expect("Failed to read preshared key")),
+			Settings {
+				encoder: Encoder::PcmFloat,
+				cover: -1,
+			},
 		)
 	});
 	while monolib::get_metadata().is_none() {}
 	let mut md = monolib::get_metadata().unwrap();
+	verbose!("md: {:?}", md);
 	let mut track_start = Instant::now();
 	let mut seconds_past = 0;
 	crossterm::execute!(
@@ -101,9 +123,10 @@ fn main() {
 			}
 		}
 		if monolib::get_metadata().unwrap() != md
-			&& track_length <= (Instant::now() - track_start).as_secs_f64()
+		//&& track_length <= (Instant::now() - track_start).as_secs_f64()
 		{
 			md = next_md.clone();
+			verbose!("md: {:?}", md);
 			crossterm::execute!(stdout(), Clear(ClearType::CurrentLine), MoveToColumn(0)).unwrap();
 			print!(
 				"Playing: {} - {} - {} (0:00 / {}:{:02})",
