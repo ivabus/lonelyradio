@@ -5,7 +5,6 @@ use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use lonelyradio_types::{Encoder, Settings};
 use std::io::stdout;
-use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -15,9 +14,6 @@ static VERBOSE: OnceLock<bool> = OnceLock::new();
 struct Args {
 	/// Remote address
 	address: String,
-
-	#[arg(long)]
-	xor_key_file: Option<PathBuf>,
 
 	#[arg(short, long)]
 	verbose: bool,
@@ -44,7 +40,6 @@ fn main() {
 	std::thread::spawn(move || {
 		monolib::run(
 			&args.address,
-			args.xor_key_file.map(|key| std::fs::read(key).expect("Failed to read preshared key")),
 			Settings {
 				encoder: Encoder::PcmFloat,
 				cover: -1,
@@ -68,7 +63,6 @@ fn main() {
 		))
 	)
 	.unwrap();
-	let mut track_length = md.track_length_secs as f64 + md.track_length_frac as f64;
 	let mut next_md = md.clone();
 	crossterm::terminal::enable_raw_mode().unwrap();
 	loop {
@@ -138,7 +132,6 @@ fn main() {
 			);
 			track_start = Instant::now();
 			seconds_past = 0;
-			track_length = md.track_length_secs as f64 + md.track_length_frac as f64
 		} else if next_md == md {
 			next_md = monolib::get_metadata().unwrap();
 		}
