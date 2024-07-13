@@ -193,15 +193,23 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
 }
 
 fn track_valid(track: &Path) -> bool {
-	if !track.metadata().unwrap().is_file() {
+	if let Ok(meta) = track.metadata() {
+		if !meta.is_file() {
+			return false;
+		}
+	} else {
 		return false;
 	}
-	// Skipping "images" (covers)
-	if "jpgjpegpngwebp".contains(&track.extension().unwrap().to_str().unwrap().to_ascii_lowercase())
-	{
-		return false;
+	if let Some(ext) = track.extension() {
+		[
+			"aac", "mp1", "mp2", "mp3", "wav", "wave", "webm", "mkv", "mp4", "m4a", "m4p", "m4b",
+			"m4r", "m4v", "mov", "aiff", "aif", "aifc", "ogg", "ogv", "oga", "ogx", "ogm", "spx",
+			"opus", "caf", "flac",
+		]
+		.contains(&ext.to_str().unwrap())
+	} else {
+		false
 	}
-	true
 }
 
 async fn stream(mut s: TcpStream, tracklist: Arc<Vec<PathBuf>>, settings: Settings) {
