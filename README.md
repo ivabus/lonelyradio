@@ -9,7 +9,7 @@ Optionally transcodes audio into and from FLAC using [flacenc-rs](https://github
 ## Install server
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.0 lonelyradio
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 lonelyradio
 ```
 
 ## Run
@@ -41,7 +41,7 @@ Look into `--help` for detailed info
 ##### Install
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.0 monoclient-s
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 monoclient-s
 ```
 
 You may need to install some dependencies for Slint.
@@ -67,7 +67,7 @@ monoclient <SERVER>:<PORT>
 ##### Install monoclient
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.0 monoclient
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 monoclient
 ```
 
 # Other things
