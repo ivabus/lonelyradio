@@ -7,6 +7,6 @@ authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 repository = "https://github.com/ivabus/lonelyradio"
 
 [dependencies]
-monolib = { version = "0.7.0", path = "../monolib" }
+monolib = { version = "0.7.1", path = "../monolib" }
 clap = { version = "4.5.16", features = ["derive"] }
 crossterm = "0.28.1"

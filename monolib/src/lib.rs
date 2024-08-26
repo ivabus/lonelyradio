@@ -5,8 +5,9 @@
 //! extern crate monolib;
 //! use std::thread::{sleep, spawn};
 //! use std::time::Duration;
+//! use monolib::lonelyradio_types::{Settings, Encoder};
 //!
-//! spawn(|| monolib::run("someserver:someport"));
+//! spawn(|| monolib::run("someserver:someport", Settings {encoder: Encoder::Flac, cover: -1}, "my_playlist"));
 //! while monolib::get_metadata().is_none() {}
 //! let seconds = md.length / md.sample_rate as u64 / 2;
 //! println!("Playing: {} - {} - {} ({}:{:02})", md.artist, md.album, md.title, seconds / 60, seconds % 60);

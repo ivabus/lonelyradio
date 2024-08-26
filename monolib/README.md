@@ -9,7 +9,8 @@ A library implementing the lonely radio audio streaming protocol
 ## Examples
 
 - [CLI](../monoclient)
-- [SwiftUI](../platform/swiftui)
+- [SwiftUI](../monoclient-x)
+- [Slint](../monoclient-s)
 
 ## License
 

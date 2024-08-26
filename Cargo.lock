@@ -2851,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "monolib"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "byteorder",

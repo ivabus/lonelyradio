@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 slint = { version = "1.6" }
-monolib = { path = "../monolib", version = "0.7.0" }
+monolib = { path = "../monolib", version = "0.7.1" }
 zune-jpeg = "0.4.13"
 
 [package.metadata.bundle]
