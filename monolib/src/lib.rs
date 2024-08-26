@@ -17,19 +17,36 @@
 /// Functions, providing C-like API
 pub mod c;
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use lonelyradio_types::{Encoder, Message, ServerCapabilities, Settings, TrackMetadata};
+pub use lonelyradio_types;
+
+use anyhow::{bail, Context};
+use decode::decode;
+use lonelyradio_types::{
+	Encoder, PlayMessage, Request, RequestResult, ServerCapabilities, Settings, TrackMetadata,
+};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
-use std::error::Error;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpStream;
 use std::sync::atomic::AtomicU8;
 use std::sync::RwLock;
 use std::time::Instant;
 
+mod decode;
+
 const CACHE_SIZE_PCM: usize = 32;
-const CACHE_SIZE_COMPRESSED: usize = 2;
+const CACHE_SIZE_COMPRESSED: usize = 4;
+
+const SUPPORTED_DECODERS: &[Encoder] = &[
+	Encoder::Pcm16,
+	Encoder::PcmFloat,
+	#[cfg(feature = "flac")]
+	Encoder::Flac,
+	#[cfg(feature = "alac")]
+	Encoder::Alac,
+	#[cfg(feature = "vorbis")]
+	Encoder::Vorbis,
+];
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 static VOLUME: AtomicU8 = AtomicU8::new(255);
@@ -144,139 +161,146 @@ pub fn set_volume(volume: u8) {
 }
 
 /// Download track as samples
-pub fn get_track(server: &str, mut settings: Settings) -> Option<(TrackMetadata, Vec<i16>)> {
-	let mut connection = unwrap(TcpStream::connect(server))?;
-	unwrap(connection.write_u64::<LittleEndian>(lonelyradio_types::HELLO_MAGIC))?;
-	let capabilities: ServerCapabilities = unwrap(rmp_serde::from_read(&mut connection))?;
+pub fn get_track(
+	server: &str,
+	mut settings: Settings,
+	playlist: &str,
+) -> anyhow::Result<(TrackMetadata, Vec<f32>)> {
+	let mut connection = TcpStream::connect(server)?;
+	connection.write_all(lonelyradio_types::HELLO_MAGIC)?;
+	let capabilities: ServerCapabilities = rmp_serde::from_read(&mut connection)?;
 	if !capabilities.encoders.contains(&settings.encoder) {
 		settings.encoder = Encoder::Pcm16
 	}
-	unwrap(connection.write_all(&rmp_serde::to_vec_named(&settings).unwrap()))?;
 
-	let mut stream = connection;
+	let request = if playlist.is_empty() {
+		Request::Play(settings)
+	} else {
+		Request::PlayPlaylist(playlist.to_string(), settings)
+	};
+	connection.write_all(&rmp_serde::to_vec_named(&request).unwrap())?;
+
+	let response: RequestResult = rmp_serde::from_read(&connection)?;
+	if let RequestResult::Error(e) = response {
+		bail!("{e:?}")
+	}
+
 	let mut samples = vec![];
 	let mut md: Option<TrackMetadata> = None;
+
 	loop {
-		let recv_md: Message = rmp_serde::from_read(&mut stream).expect("Failed to parse message");
+		let recv_md: PlayMessage = rmp_serde::from_read(&mut connection)?;
 		match recv_md {
-			Message::T(tmd) => {
+			PlayMessage::T(tmd) => {
 				if md.is_some() {
 					break;
 				}
 				md = Some(tmd);
 			}
-			Message::F(fmd) => match md.as_ref().unwrap().encoder {
-				Encoder::Pcm16 => {
-					let mut buf = vec![0; fmd.length as usize];
-					stream.read_i16_into::<LittleEndian>(&mut buf).unwrap();
-					samples.append(&mut buf);
-				}
-				Encoder::PcmFloat => unimplemented!(),
-				Encoder::Flac => {
-					let take = std::io::Read::by_ref(&mut stream).take(fmd.length);
-					let mut reader = claxon::FlacReader::new(take).unwrap();
-					samples.append(
-						&mut reader.samples().map(|x| x.unwrap_or(0) as i16).collect::<Vec<i16>>(),
-					);
-				}
-			},
+			PlayMessage::F(fmd) => {
+				samples.extend(decode(&mut connection, md.as_ref().unwrap(), &fmd)?)
+			}
 		}
 	}
-	md.map(|md| (md, samples))
+
+	if let Some(md) = md {
+		Ok((md, samples))
+	} else {
+		bail!("No metadata")
+	}
 }
 
-fn unwrap<T, E: Error>(thing: Result<T, E>) -> Option<T> {
-	if thing.is_err() {
-		*STATE.write().unwrap() = State::NotStarted;
+pub fn list_playlists(server: &str) -> Option<Vec<String>> {
+	let mut connection = TcpStream::connect(server).ok()?;
+	connection.write_all(lonelyradio_types::HELLO_MAGIC).ok()?;
+	let _: ServerCapabilities = rmp_serde::from_read(&mut connection).ok()?;
+	connection.write_all(&rmp_serde::to_vec_named(&Request::ListPlaylist).ok()?).ok()?;
+	let res: RequestResult = rmp_serde::from_read(connection).ok()?;
+	match res {
+		RequestResult::Playlist(plist) => Some(plist.playlists),
+		_ => None,
 	}
-	thing.ok()
 }
 
 /// Starts playing at "server:port"
-pub fn run(server: &str, settings: Settings) {
-	let _ = _run(server, settings);
+pub fn run(server: &str, settings: Settings, playlist: &str) {
+	let result = _run(server, settings, playlist);
+	if let Err(e) = result {
+		println!("{:?}", e);
+		*STATE.write().unwrap() = State::NotStarted;
+	}
 }
 
-pub fn _run(server: &str, settings: Settings) -> Option<()> {
-	let mut settings = settings;
+pub(crate) fn _run(server: &str, mut settings: Settings, playlist: &str) -> anyhow::Result<()> {
+	if !SUPPORTED_DECODERS.contains(&settings.encoder) {
+		eprintln!(
+			"monolib was built without support for {:?}, falling back to Pcm16",
+			settings.encoder
+		);
+		settings.encoder = Encoder::Pcm16
+	}
 	let mut state = STATE.write().unwrap();
 	if *state == State::Playing || *state == State::Paused {
-		return None;
+		return Ok(());
 	}
 	*state = State::Playing;
 	drop(state);
 
-	let mut connection = unwrap(TcpStream::connect(server))?;
-	unwrap(connection.write_u64::<LittleEndian>(lonelyradio_types::HELLO_MAGIC))?;
-	let capabilities: ServerCapabilities = unwrap(rmp_serde::from_read(&mut connection))?;
+	let mut connection = TcpStream::connect(server).context("failed to connect to the server")?;
+	connection.write_all(lonelyradio_types::HELLO_MAGIC)?;
+	let capabilities: ServerCapabilities = rmp_serde::from_read(&mut connection)?;
 	if !capabilities.encoders.contains(&settings.encoder) {
 		settings.encoder = Encoder::Pcm16
 	}
-	unwrap(connection.write_all(&rmp_serde::to_vec_named(&settings).unwrap()))?;
 
+	let request = if playlist.is_empty() {
+		Request::Play(settings)
+	} else {
+		Request::PlayPlaylist(playlist.to_string(), settings)
+	};
+	connection.write_all(&rmp_serde::to_vec_named(&request).unwrap())?;
+
+	let response: RequestResult = rmp_serde::from_read(&connection).unwrap();
+	if let RequestResult::Error(e) = response {
+		bail!("{:?}", e)
+	}
 	let mut stream = connection;
 
 	let mut sink = SINK.write().unwrap();
-	let (_stream, stream_handle) = unwrap(OutputStream::try_default())?;
+	let (_stream, stream_handle) =
+		OutputStream::try_default().context("failed to determine audio device")?;
 
 	// Can't reuse old sink for some reason
-	let audio_sink = Sink::try_new(&stream_handle).unwrap();
+	let audio_sink = Sink::try_new(&stream_handle).context("failed to create audio sink")?;
 	*sink = Some(audio_sink);
 	drop(sink);
 
 	let mut samples = Vec::with_capacity(8192);
 	loop {
-		let recv_md: Message = rmp_serde::from_read(&mut stream).expect("Failed to parse message");
+		let recv_md: PlayMessage =
+			rmp_serde::from_read(&mut stream).expect("Failed to parse message");
 		match recv_md {
-			Message::T(tmd) => {
+			PlayMessage::T(tmd) => {
 				// No metadata shift
 				if watching_sleep_until_end() {
 					_stop();
-					return None;
+					return Ok(());
 				}
 				let mut md = MD.write().unwrap();
 				*md = Some(tmd.clone());
+
 				drop(md);
 			}
-			Message::F(fmd) => {
+			PlayMessage::F(fmd) => {
 				while *STATE.read().unwrap() == State::Paused {
 					std::thread::sleep(std::time::Duration::from_secs_f32(0.25))
 				}
 				if *STATE.read().unwrap() == State::Resetting {
 					_stop();
-					return None;
+					return Ok(());
 				}
-				match MD.read().unwrap().as_ref().unwrap().encoder {
-					Encoder::Pcm16 => {
-						let mut samples_i16 = vec![0; fmd.length as usize / 2];
-						if stream.read_i16_into::<LittleEndian>(&mut samples_i16).is_err() {
-							return None;
-						};
-						samples.append(
-							&mut samples_i16
-								.iter()
-								.map(|sample| *sample as f32 / 32767.0)
-								.collect(),
-						);
-					}
-					Encoder::PcmFloat => {
-						let mut samples_f32 = vec![0f32; fmd.length as usize / 4];
-						if stream.read_f32_into::<LittleEndian>(&mut samples_f32).is_err() {
-							return None;
-						};
-						samples.append(&mut samples_f32);
-					}
-					Encoder::Flac => {
-						let take = std::io::Read::by_ref(&mut stream).take(fmd.length);
-						let mut reader = claxon::FlacReader::new(take).unwrap();
-						samples.append(
-							&mut reader
-								.samples()
-								.map(|x| x.unwrap_or(0) as f32 / 32768.0 / 256.0)
-								.collect::<Vec<f32>>(),
-						);
-					}
-				};
+
+				samples.extend(decode(&mut stream, &MD.read().unwrap().clone().unwrap(), &fmd)?);
 
 				// Synchronizing with sink
 				let sink = SINK.read().unwrap();
@@ -284,8 +308,12 @@ pub fn _run(server: &str, settings: Settings) -> Option<()> {
 				let md = _md.as_ref().unwrap().clone();
 				drop(_md);
 				if let Some(sink) = sink.as_ref() {
-					while (sink.len() >= CACHE_SIZE_PCM && md.encoder != Encoder::Flac)
-						|| (sink.len() >= CACHE_SIZE_COMPRESSED && md.encoder == Encoder::Flac)
+					while (sink.len() >= CACHE_SIZE_PCM
+						&& md.encoder == Encoder::Pcm16
+						&& md.encoder == Encoder::PcmFloat)
+						|| (sink.len() >= CACHE_SIZE_COMPRESSED
+							&& md.encoder != Encoder::Pcm16
+							&& md.encoder != Encoder::PcmFloat)
 					{
 						// Sleeping exactly one buffer and watching for reset signal
 						if watching_sleep(
@@ -297,7 +325,7 @@ pub fn _run(server: &str, settings: Settings) -> Option<()> {
 								/ 4.0,
 						) {
 							_stop();
-							return None;
+							return Ok(());
 						}
 					}
 					sink.append(SamplesBuffer::new(

@@ -1,12 +1,13 @@
 [package]
 name = "lonelyradio_types"
+edition = "2021"
+version = "0.7.0"
+authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 description = "Shared types for lonelyradio"
 license = "MIT"
-version = "0.6.0"
-edition = "2021"
-authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 repository = "https://github.com/ivabus/lonelyradio"
 
+
 [dependencies]
-serde = { version = "1.0.197", features = ["derive"] }
-serde_bytes = "0.11.15"
+serde = {version = "1.0.209", features = ["derive"]}
+serde_bytes = {version = "0.11.15"}

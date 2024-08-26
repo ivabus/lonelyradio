@@ -11,37 +11,50 @@ pub struct CTrackMetadata {
 	pub artist: *mut c_char,
 }
 
-pub const ENCODER_PCM16: u8 = 0;
-pub const ENCODER_PCMFLOAT: u8 = 1;
-pub const ENCODER_FLAC: u8 = 2;
-
 #[repr(C)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CSettings {
-	/// See lonelyradio_types -> Encoder
+	/// See lonelyradio_types for numeric representation -> Encoder
 	pub encoder: u8,
 	pub cover: i32,
 }
 
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn c_start(server: *const c_char, settings: CSettings) {
+/// Starts audio playback using rodio
+/// Play without playlist => playlist = ""
+pub extern "C" fn c_start(server: *const c_char, settings: CSettings, playlist: *const c_char) {
 	let serv = unsafe { CStr::from_ptr(server) };
+	let playlist = unsafe { CStr::from_ptr(playlist) };
 	run(
-		match serv.to_str() {
-			Ok(s) => s,
-			_ => "",
-		},
+		serv.to_str().unwrap_or_default(),
 		Settings {
 			encoder: match settings.encoder {
 				0 => Encoder::Pcm16,
 				1 => Encoder::PcmFloat,
 				2 => Encoder::Flac,
+				3 => Encoder::Alac,
+				7 => Encoder::Vorbis,
 				_ => return,
 			},
 			cover: settings.cover,
 		},
+		playlist.to_str().unwrap_or_default(),
 	)
+}
+
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+/// Playlists separated by '\n'
+pub extern "C" fn c_list_playlists(server: *const c_char) -> *mut c_char {
+	let serv = unsafe { CStr::from_ptr(server) };
+	let playlists = list_playlists(serv.to_str().unwrap_or_default());
+	CString::new(match playlists {
+		None => "".to_string(),
+		Some(s) => s.join("\n"),
+	})
+	.unwrap()
+	.into_raw()
 }
 
 #[no_mangle]

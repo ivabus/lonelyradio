@@ -47,7 +47,7 @@ struct Cover {
 			self.cover = PlatformImage(cgImage: CGImage(jpegDataProviderSource: CGDataProvider(data: data)!, decode: nil, shouldInterpolate: false, intent: CGColorRenderingIntent.absoluteColorimetric)!).preparingForDisplay()!
 #endif
 			// deallocating memory
-			c_drop(cov.bytes, Int(cov.length))
+			c_drop(cov.bytes, UInt(Int(cov.length)))
 			print(self.cover.size)
 			
 		} else {

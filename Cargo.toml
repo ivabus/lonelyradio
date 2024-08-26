@@ -10,20 +10,17 @@ members = [
 [package]
 name = "lonelyradio"
 description = "TCP radio for lonely ones"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 repository = "https://github.com/ivabus/lonelyradio"
 
 [dependencies]
-lonelyradio_types = { version = "0.6.0", path = "./lonelyradio_types" }
+lonelyradio_types = { version = "0.7.0", path = "./lonelyradio_types" }
 rand = "0.8.5"
 clap = { version = "4.4.18", features = ["derive"] }
 tokio = { version = "1.35.1", features = [
-    "sync",
-    "fs",
-    "io-util",
     "net",
     "rt-multi-thread",
     "rt",
@@ -42,14 +39,27 @@ lofty = "0.18.2"
 async-stream = "0.3.5"
 tokio-stream = { version = "0.1.15", features = ["sync"] }
 futures-util = "0.3.30"
-samplerate = "0.2.4"
 once_cell = "1.19.0"
-flacenc = { version = "0.4.0", default-features = false }
-image = "0.25.1"
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "bmp"]}
+xspf = "0.4.0"
+url = "2.5.2"
+samplerate = "0.2.4"
 
-[build-dependencies]
-cc = "1.0.98"
+# Optional encoders
+flacenc = { version = "0.4.0", default-features = false, optional = true }
+alac-encoder = { version = "0.3.0", optional = true }
+vorbis_rs = {version = "0.5.4", optional = true }
 
-[profile.release]
+[features]
+default = ["all-lossless", "all-lossy"]
+all-lossless = ["alac", "flac"]
+all-lossy = ["vorbis"]
+alac = ["dep:alac-encoder"]
+flac = ["dep:flacenc"]
+vorbis = ["dep:vorbis_rs"]
+
+[profile.distribute]
+inherits = "release"
 opt-level = 3
 strip = true
+lto = "fat"

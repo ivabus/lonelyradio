@@ -25,11 +25,12 @@ struct monoclient_xApp: App {
 				CommandGroup(replacing: CommandGroupPlacement.newItem) {
 				}
 			}
+			.defaultSize(width: 256, height: 512)
 #else
 		WindowGroup {
 			ContentView()
 		}
-		.defaultSize(width: 256, height: 512)
+
 #endif
 	}
 }

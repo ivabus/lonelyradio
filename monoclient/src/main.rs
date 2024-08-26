@@ -3,7 +3,7 @@ use crossterm::cursor::MoveToColumn;
 use crossterm::event::{poll, read, Event};
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
-use lonelyradio_types::{Encoder, Settings};
+use monolib::lonelyradio_types::{Encoder, Settings};
 use std::io::stdout;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -17,6 +17,12 @@ struct Args {
 
 	#[arg(short, long)]
 	verbose: bool,
+
+	#[arg(short, long, default_value = "")]
+	playlist: String,
+
+	#[arg(short, long)]
+	list: bool,
 }
 
 const HELP: &str = r#"Keybinds:
@@ -37,17 +43,29 @@ macro_rules! verbose {
 fn main() {
 	let args = Args::parse();
 	VERBOSE.set(args.verbose).unwrap();
+	if args.list {
+		println!(
+			"Available playlists: {}",
+			match monolib::list_playlists(&args.address) {
+				Some(s) => format!("{:?}", s),
+				None => String::from("None"),
+			}
+		);
+		return;
+	}
 	std::thread::spawn(move || {
 		monolib::run(
 			&args.address,
 			Settings {
-				encoder: Encoder::PcmFloat,
+				encoder: Encoder::Flac,
 				cover: -1,
 			},
+			&args.playlist,
 		)
 	});
 	while monolib::get_metadata().is_none() {}
 	let mut md = monolib::get_metadata().unwrap();
+	let mut next_md = md.clone();
 	verbose!("md: {:?}", md);
 	let mut track_start = Instant::now();
 	let mut seconds_past = 0;
@@ -63,7 +81,6 @@ fn main() {
 		))
 	)
 	.unwrap();
-	let mut next_md = md.clone();
 	crossterm::terminal::enable_raw_mode().unwrap();
 	loop {
 		if let Ok(true) = poll(std::time::Duration::from_micros(1)) {
@@ -116,8 +133,8 @@ fn main() {
 				}
 			}
 		}
-		if monolib::get_metadata().unwrap() != md
-		//&& track_length <= (Instant::now() - track_start).as_secs_f64()
+		if next_md != md
+			&& md.track_length_secs as f64 <= (Instant::now() - track_start).as_secs_f64()
 		{
 			md = next_md.clone();
 			verbose!("md: {:?}", md);

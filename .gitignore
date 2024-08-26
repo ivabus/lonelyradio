@@ -50,7 +50,6 @@ fastlane/test_output
 ### SwiftPackageManager ###
 Packages
 xcuserdata
-*.xcodeproj
 
 ### Xcode ###
 # Xcode

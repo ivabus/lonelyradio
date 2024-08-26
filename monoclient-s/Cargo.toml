@@ -1,17 +1,13 @@
 [package]
 name = "monoclient-s"
 description = "Client for lonelyradio built with Slint"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 
 [dependencies]
-slint = { version = "1.6", features = ["backend-android-activity-06"] }
-monolib = { path = "../monolib", version = "0.6.0" }
-lonelyradio_types = { version = "0.6.0", path = "../lonelyradio_types" }
-zune-jpeg = "0.4.11"
-
-[lib]
-crate-type = [ "cdylib" ]
+slint = { version = "1.6" }
+monolib = { path = "../monolib", version = "0.7.0" }
+zune-jpeg = "0.4.13"
 
 [package.metadata.bundle]
 name = "monoclient-s"

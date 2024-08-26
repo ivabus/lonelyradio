@@ -1,26 +1,32 @@
-# lonelyradio
+# lonelyradio Music Streamer
 
-Broadcast lossless audio over the internet.
+Shuffles through your [XSPF playlists](https://www.xspf.org) or your entire library.
 
-Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia).
+Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia) (supported [decoders](https://github.com/pdeljanov/Symphonia?tab=readme-ov-file#codecs-decoders) and [demuxers](https://github.com/pdeljanov/Symphonia?tab=readme-ov-file#formats-demuxers))
 
-Optionally transcodes audio into and from FLAC using [flacenc-rs](https://github.com/yotarok/flacenc-rs/) and [claxon](https://github.com/ruuda/claxon).
+Streams music using [FLAC](https://crates.io/crates/flacenc), [ALAC](https://crates.io/crates/alac-encoder), [Vorbis](https://crates.io/crates/vorbis_rs) or raw PCM on client’s requests.
 
-## Install server
+### Install server
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 lonelyradio
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 lonelyradio
 ```
 
-## Run
+### Run
 
 ```
 lonelyradio <MUSIC_FOLDER>
 ```
 
-All files (recursively) will be shuffled and played back. Public log will be displayed to stdout, private to stderr.
+All files (recursively) will be shuffled and played back. Log will be displayed to stdout.
 
 Look into `--help` for detailed info
+
+#### Playlists
+
+Specify a directory with playlists with `--playlist-dir`. lonelyradio will scan them on startup and play them on clients’ requests.
+
+Only the `<location>` and (playlist's) element would be used and only `file://` is supported.
 
 ### Clients
 
@@ -37,42 +43,37 @@ Look into `--help` for detailed info
 
 [monoclient-s](./monoclient-s) is a GUI player for lonelyradio built with [Slint](https://slint.dev)
 
-
 ##### Install
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 monoclient-s
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 monoclient-s
 ```
 
 You may need to install some dependencies for Slint.
 
 Desktop integration will be added later.
 
-##### Build
-
-```
-cargo build -p monoclient-s
-```
-
-You may need to install some dependencies for Slint.
-
 #### monoclient
 
 [monoclient](./monoclient) is a CLI player for lonelyradio that uses [monolib](./monolib)
+
+##### Install monoclient
+
+```shell
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 monoclient
+```
+
+#### Usage
 
 ```shell
 monoclient <SERVER>:<PORT>
 ```
 
-##### Install monoclient
-
-```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.6.1 monoclient
-```
+Look into `--help` for detailed info on usage.
 
 # Other things
 
-[monoloader](./monoloader) is a tool, that allows you to download individual audio tracks from lonelyradio-compatible servers.
+[monoloader](./monoloader) is a tool that allows you to download individual audio tracks from lonelyradio-compatible servers.
 
 [monolib](./monolib) provides a C API compatible with lonelyradio for creating custom clients.
 
@@ -81,10 +82,6 @@ The full protocol specification will be available later. If you would like to le
 #### monolib API stability
 
 As lonelyradio has not yet reached its first major release, the API may (and will) break at any point.
-
-### Microphone server
-
-Experimental (and uncompatible with versions 0.6+) server (lonelyradio-compatible) for streaming audio from your microphone is available in the [microserve](./microserve) crate.
 
 ## License
 

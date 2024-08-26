@@ -11,7 +11,7 @@ use symphonia::core::units::Time;
 
 use crate::Args;
 
-pub async fn get_meta(file_path: &Path) -> (u16, u32, Time) {
+pub async fn get_meta(file_path: &Path, encoder_wants: u32) -> (u16, u32, Time) {
 	let file = Box::new(std::fs::File::open(file_path).unwrap());
 	let mut hint = Hint::new();
 	hint.with_extension(file_path.extension().unwrap().to_str().unwrap());
@@ -65,11 +65,26 @@ pub async fn get_meta(file_path: &Path) -> (u16, u32, Time) {
 	}
 	let args = Args::parse();
 
-	(channels, get_resampling_rate(&sample_rate, &args.max_samplerate), track_length)
+	(
+		channels,
+		if args.no_resampling && encoder_wants == 0 {
+			sample_rate
+		} else {
+			get_resampling_rate(
+				&sample_rate,
+				&if encoder_wants != 0 {
+					args.max_samplerate.min(encoder_wants)
+				} else {
+					args.max_samplerate
+				},
+			)
+		},
+		track_length,
+	)
 }
 
 /// Getting samples
-pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<f32>> {
+pub fn decode_file_stream(file_path: PathBuf, encoder_wants: u32) -> impl Stream<Item = Vec<f32>> {
 	let args = Args::parse();
 	let file = Box::new(std::fs::File::open(&file_path).unwrap());
 	let mut hint = Hint::new();
@@ -93,7 +108,7 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<f32>> {
 		.expect("no supported audio tracks");
 
 	let mut decoder = symphonia::default::get_codecs()
-		.make(track.codec_params.clone().with_max_frames_per_packet(65536), &Default::default())
+		.make(&track.codec_params, &Default::default())
 		.expect("unsupported codec");
 	let track_id = track.id;
 	stream! {
@@ -109,30 +124,30 @@ pub fn decode_file_stream(file_path: PathBuf) -> impl Stream<Item = Vec<f32>> {
 
 			match decoder.decode(&packet) {
 				Ok(decoded) => {
-					if decoded.spec().rate > args.max_samplerate {
+					let output_rate = get_resampling_rate(&decoded.spec().rate, &if encoder_wants != 0 {
+						args.max_samplerate.min(encoder_wants)
+					} else {
+						args.max_samplerate
+					});
+					if decoded.spec().rate > output_rate && (!args.no_resampling || encoder_wants != 0) {
 						let spec = *decoded.spec();
 						let mut byte_buf =
 							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
 						byte_buf.copy_interleaved_ref(decoded);
-						let output_rate = get_resampling_rate(&spec.rate,&args.max_samplerate);
-
 						// About Samplerate struct:
 						// We are downsampling, not upsampling, so we should be fine
-						yield (
-							if output_rate == spec.rate {
-								byte_buf.samples().to_vec()
-							} else {
-								samplerate::convert(
-									spec.rate,
-									args.max_samplerate,
-									spec.channels.count(),
-									samplerate::ConverterType::Linear,
-									byte_buf.samples(),
-								)
-								.unwrap()
-							}
-						);
-
+						yield (if output_rate == spec.rate {
+							byte_buf.samples().to_vec()
+						} else {
+							samplerate::convert(
+								spec.rate,
+								output_rate,
+								spec.channels.count(),
+								samplerate::ConverterType::Linear,
+								byte_buf.samples(),
+							)
+							.unwrap()
+						});
 					} else {
 						let mut byte_buf =
 							SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
