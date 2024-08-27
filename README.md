@@ -22,6 +22,17 @@ All files (recursively) will be shuffled and played back. Log will be displayed 
 
 Look into `--help` for detailed info
 
+#### Run in Docker
+
+```
+docker run -d \
+   --name lonelyradio \
+   --restart=unless-stopped \
+   -v /path/to/music:/music \
+   -p 5894:5894 \
+   ivabuz/lonelyradio:latest
+```
+
 #### Playlists
 
 Specify a directory with playlists with `--playlist-dir`. lonelyradio will scan them on startup and play them on clients’ requests.
