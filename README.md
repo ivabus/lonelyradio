@@ -77,7 +77,7 @@ Look into `--help` for detailed info on usage.
 
 [monolib](./monolib) provides a C API compatible with lonelyradio for creating custom clients.
 
-The full protocol specification will be available later. If you would like to learn more about it now, please refer to the monolib.
+[Protocol documentation] shortly describes the protocol used in lonelyradio. Please refer to monolib and verify custom clients with the reference lonelyradio server.
 
 #### monolib API stability
 
