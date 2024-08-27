@@ -102,46 +102,18 @@ async fn stream_track(
 		let mut _samples = _samples.concat();
 
 		match md.encoder {
-			Encoder::Pcm16 => {
-				let _md = PlayMessage::F(FragmentMetadata {
-					length: _samples.len() as u64 * 2,
-					magic_cookie: None,
-				});
-				if s.write_all(rmp_serde::to_vec(&_md).unwrap().as_slice()).is_err() {
-					return true;
-				}
-				if s.write_all(
-					&encode(Encoder::Pcm16, _samples, md.sample_rate, md.channels).unwrap().0,
-				)
-				.is_err()
-				{
-					return true;
-				}
-			}
-			Encoder::PcmFloat => {
-				let _md = PlayMessage::F(FragmentMetadata {
-					length: _samples.len() as u64 * 4,
-					magic_cookie: None,
-				});
-				if s.write_all(rmp_serde::to_vec(&_md).unwrap().as_slice()).is_err() {
-					return true;
-				}
-				if s.write_all(
-					&encode(Encoder::PcmFloat, _samples, md.sample_rate, md.channels).unwrap().0,
-				)
-				.is_err()
-				{
-					return true;
-				}
-			}
-			Encoder::Flac | Encoder::Alac | Encoder::Vorbis => {
+			Encoder::Pcm16
+			| Encoder::PcmFloat
+			| Encoder::Flac
+			| Encoder::Alac
+			| Encoder::Vorbis => {
 				let (encoded, magic_cookie) =
 					encode(md.encoder, _samples, md.sample_rate, md.channels).unwrap();
 				let _md = PlayMessage::F(FragmentMetadata {
 					length: encoded.as_slice().len() as u64,
 					magic_cookie,
 				});
-				if s.write_all(rmp_serde::to_vec(&_md).unwrap().as_slice()).is_err() {
+				if s.write_all(rmp_serde::to_vec_named(&_md).unwrap().as_slice()).is_err() {
 					return true;
 				}
 				if s.write_all(encoded.as_slice()).is_err() {

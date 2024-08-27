@@ -103,7 +103,7 @@ pub enum Encoder {
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct FragmentMetadata {
-	// In bytes or samples, depends on encoder: Pcm* - samples, any compressed - bytes
+	// In bytes
 	#[serde(rename = "le")]
 	pub length: u64,
 
