@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use monolib::lonelyradio_types;
 use monolib::State;
 use slint::{
 	Image, ModelRc, Rgb8Pixel, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel, Weak,
