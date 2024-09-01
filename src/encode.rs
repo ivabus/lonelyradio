@@ -32,13 +32,12 @@ pub fn encode(
 			#[cfg(feature = "flac")]
 			{
 				use flacenc::{component::BitRepr, error::Verify, source::MemSource};
-
 				let encoded = flacenc::encode_with_fixed_block_size(
 					&flacenc::config::Encoder::default().into_verified().unwrap(),
 					MemSource::from_samples(
 						&samples
 							.iter()
-							.map(|x| (*x as f64 * 32768.0 * 256.0) as i32)
+							.map(|x| (x.clamp(-1.0, 1.0) as f64 * 32768.0 * 256.0) as i32)
 							.collect::<Vec<i32>>(),
 						channels as usize,
 						24,
