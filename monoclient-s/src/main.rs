@@ -174,33 +174,36 @@ pub fn main() {
 		let addr = window.get_addr().to_string();
 		if addr.contains(':') {
 			window.set_start_enabled(true);
-
-			let playlists = match monolib::list_playlists(&window.get_addr()) {
-				Some(v) => [vec!["All tracks".to_string()], v].concat(),
-				None => vec!["All tracks".to_string()],
-			};
-			window.set_playlists(ModelRc::new(VecModel::from(
-				playlists.iter().map(SharedString::from).collect::<Vec<_>>(),
-			)));
 		} else {
 			window.set_start_enabled(false);
 		}
 	});
 
 	let window_weak = window.as_weak();
-	window.on_play(move || match monolib::get_state() {
-		State::NotStarted => start_playback(window_weak.clone()),
-		State::Paused => {
-			let window = window_weak.upgrade().unwrap();
-			window.set_paused(false);
-			monolib::toggle();
+	window.on_play(move || {
+		match monolib::get_state() {
+			State::NotStarted => start_playback(window_weak.clone()),
+			State::Paused => {
+				let window = window_weak.upgrade().unwrap();
+				window.set_paused(false);
+				monolib::toggle();
+			}
+			State::Resetting => {}
+			State::Playing => {
+				let window = window_weak.upgrade().unwrap();
+				window.set_paused(true);
+				monolib::toggle()
+			}
 		}
-		State::Resetting => {}
-		State::Playing => {
-			let window = window_weak.upgrade().unwrap();
-			window.set_paused(true);
-			monolib::toggle()
-		}
+		let window = window_weak.upgrade().unwrap();
+
+		let playlists = match monolib::list_playlists(&window.get_addr()) {
+			Some(v) => [vec!["All tracks".to_string()], v].concat(),
+			None => vec!["All tracks".to_string()],
+		};
+		window.set_playlists(ModelRc::new(VecModel::from(
+			playlists.iter().map(SharedString::from).collect::<Vec<_>>(),
+		)));
 	});
 
 	let window_weak = window.as_weak();
