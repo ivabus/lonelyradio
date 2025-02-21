@@ -11,7 +11,7 @@ use symphonia::core::units::Time;
 
 use crate::Args;
 
-pub async fn get_meta(file_path: &Path, encoder_wants: u32) -> (u16, u32, Time) {
+pub fn get_meta(file_path: &Path, encoder_wants: u32) -> (u16, u32, Time) {
 	let file = Box::new(std::fs::File::open(file_path).unwrap());
 	let mut hint = Hint::new();
 	hint.with_extension(file_path.extension().unwrap().to_str().unwrap());
@@ -41,12 +41,7 @@ pub async fn get_meta(file_path: &Path, encoder_wants: u32) -> (u16, u32, Time) 
 	let mut sample_rate = 0;
 	let track_length =
 		track.codec_params.time_base.unwrap().calc_time(track.codec_params.n_frames.unwrap());
-	loop {
-		let packet = match format.next_packet() {
-			Ok(packet) => packet,
-			_ => break,
-		};
-
+	while let Ok(packet) = format.next_packet() {
 		if packet.track_id() != track_id {
 			continue;
 		}
@@ -112,12 +107,7 @@ pub fn decode_file_stream(file_path: PathBuf, encoder_wants: u32) -> impl Stream
 		.expect("unsupported codec");
 	let track_id = track.id;
 	stream! {
-		loop {
-			let packet = match format.next_packet() {
-				Ok(packet) => packet,
-				_ => break,
-			};
-
+		while let Ok(packet) = format.next_packet() {
 			if packet.track_id() != track_id {
 				continue;
 			}

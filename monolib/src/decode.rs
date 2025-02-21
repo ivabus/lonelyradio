@@ -18,8 +18,7 @@ pub(crate) fn decode(
 		Encoder::Pcm16 => {
 			let mut samples_i16 = vec![0; fmd.length as usize / 2];
 			stream.read_i16_into::<LittleEndian>(&mut samples_i16)?;
-			samples
-				.append(&mut samples_i16.iter().map(|sample| *sample as f32 / 32767.0).collect());
+			samples.extend(samples_i16.iter().map(|sample| *sample as f32 / 32767.0));
 		}
 		Encoder::PcmFloat => {
 			let mut samples_f32 = vec![0f32; fmd.length as usize / 4];
@@ -31,12 +30,8 @@ pub(crate) fn decode(
 			{
 				let take = std::io::Read::by_ref(&mut stream).take(fmd.length);
 				let mut reader = claxon::FlacReader::new(take)?;
-				samples.append(
-					&mut reader
-						.samples()
-						.map(|x| x.unwrap_or(0) as f32 / 32768.0 / 256.0)
-						.collect::<Vec<f32>>(),
-				);
+				samples
+					.extend(&mut reader.samples().map(|x| x.unwrap_or(0) as f32 / 32768.0 / 256.0));
 			}
 
 			#[cfg(not(feature = "flac"))]
@@ -73,24 +68,27 @@ pub(crate) fn decode(
 			{
 				let mut buf = vec![];
 				std::io::Read::by_ref(&mut stream).take(fmd.length).read_to_end(&mut buf)?;
-				let mut decoder = vorbis_rs::VorbisDecoder::new(Cursor::new(buf))?;
-				let mut interleaved = vec![];
-
-				while let Some(decoded_block) = decoder.decode_audio_block()? {
-					let s = decoded_block.samples();
-					interleaved.resize(s[0].len() * s.len(), 0f32);
-					for (ind, channel) in s.iter().enumerate() {
-						for (samind, sample) in channel.iter().enumerate() {
-							interleaved[ind + samind * md.channels as usize] = *sample;
-						}
-					}
-					samples.extend(interleaved);
-					interleaved = vec![];
+				let mut srr = lewton::inside_ogg::OggStreamReader::new(Cursor::new(buf))?;
+				while let Some(pck_samples) = srr.read_dec_packet_itl()? {
+					samples.extend(pck_samples.iter().map(|x| *x as f32 / 32768.0));
 				}
 			}
 			#[cfg(not(feature = "vorbis"))]
 			{
 				unimplemented!("vorbis decoding is disabled in library")
+			}
+		}
+		Encoder::Sea => {
+			#[cfg(feature = "sea")]
+			{
+				let mut buf = vec![];
+				std::io::Read::by_ref(&mut stream).take(fmd.length).read_to_end(&mut buf)?;
+				let dec = sea_codec::sea_decode(buf.as_slice());
+				samples.extend(dec.samples.iter().map(|x| *x as f32 / 32768.0));
+			}
+			#[cfg(not(feature = "sea"))]
+			{
+				unimplemented!("sea decoding is disabled in library")
 			}
 		}
 		Encoder::Aac | Encoder::Opus | Encoder::WavPack => unimplemented!(),

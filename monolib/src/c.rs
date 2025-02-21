@@ -35,6 +35,7 @@ pub extern "C" fn c_start(server: *const c_char, settings: CSettings, playlist: 
 				2 => Encoder::Flac,
 				3 => Encoder::Alac,
 				7 => Encoder::Vorbis,
+				8 => Encoder::Sea,
 				_ => return,
 			},
 			cover: settings.cover,

@@ -127,6 +127,32 @@ pub fn encode(
 				unimplemented!()
 			}
 		}
+		Encoder::Sea => {
+			#[cfg(feature = "sea")]
+			{
+				Some((
+					sea_codec::sea_encode(
+						samples
+							.iter_mut()
+							.map(|x| (*x * 32768.0) as i16)
+							.collect::<Vec<_>>()
+							.as_slice(),
+						sample_rate,
+						channels as u32,
+						sea_codec::encoder::EncoderSettings {
+							residual_bits: 5.0,
+							..Default::default()
+						},
+					),
+					None,
+				))
+			}
+
+			#[cfg(not(feature = "sea"))]
+			{
+				unimplemented!()
+			}
+		}
 		Encoder::Aac | Encoder::Opus | Encoder::WavPack => unimplemented!(),
 	}
 }

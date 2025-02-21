@@ -14,6 +14,7 @@ use encode::encode;
 use futures_util::pin_mut;
 use futures_util::StreamExt;
 use image::ImageReader;
+use image::RgbImage;
 use lofty::Accessor;
 use lofty::TaggedFileExt;
 use lonelyradio_types::Encoder;
@@ -33,7 +34,7 @@ use xspf::Playlist;
 use crate::decode::decode_file_stream;
 use crate::decode::get_meta;
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 struct Args {
 	/// Directory with audio files
 	dir: PathBuf,
@@ -67,6 +68,8 @@ const SUPPORTED_ENCODERS: &[Encoder] = &[
 	Encoder::Alac,
 	#[cfg(feature = "vorbis")]
 	Encoder::Vorbis,
+	#[cfg(feature = "sea")]
+	Encoder::Sea,
 ];
 
 async fn stream_track(
@@ -94,6 +97,7 @@ async fn stream_track(
 			Encoder::Flac => 16,
 			Encoder::Alac => 32,
 			Encoder::Vorbis => 64,
+			Encoder::Sea => 64,
 			Encoder::Aac | Encoder::Opus | Encoder::WavPack => unimplemented!(),
 		})
 		.next()
@@ -106,7 +110,8 @@ async fn stream_track(
 			| Encoder::PcmFloat
 			| Encoder::Flac
 			| Encoder::Alac
-			| Encoder::Vorbis => {
+			| Encoder::Vorbis
+			| Encoder::Sea => {
 				let (encoded, magic_cookie) =
 					encode(md.encoder, _samples, md.sample_rate, md.channels).unwrap();
 				let _md = PlayMessage::F(FragmentMetadata {
@@ -294,6 +299,56 @@ fn track_valid(track: &Path) -> bool {
 	}
 }
 
+struct Metadata {
+	title: String,
+	album: String,
+	artist: String,
+	cover: Option<RgbImage>,
+}
+
+fn get_metadata(track: impl AsRef<Path>, args: &Args, settings: &Settings) -> Option<Metadata> {
+	let mut title = String::new();
+	let mut artist = String::new();
+	let mut album = String::new();
+	let mut cover = std::thread::spawn(|| None);
+	let mut file = std::fs::File::open(&track).unwrap();
+	let tagged = lofty::read_from(&mut file).ok()?;
+	if let Some(id3v2) = tagged.primary_tag() {
+		title = id3v2
+			.title()
+			.unwrap_or(track.as_ref().file_stem().unwrap().to_string_lossy())
+			.to_string();
+		album = id3v2.album().unwrap_or("".into()).to_string();
+		artist = id3v2.artist().unwrap_or("".into()).to_string();
+		if !(id3v2.pictures().is_empty() || args.artwork == -1 || settings.cover == -1) {
+			let pic = id3v2.pictures()[0].clone();
+			let args = args.clone();
+			let settings = settings.clone();
+			cover = std::thread::spawn(move || {
+				let dec = ImageReader::new(Cursor::new(pic.into_data()))
+					.with_guessed_format()
+					.ok()?
+					.decode()
+					.ok()?;
+				let img = if args.artwork != 0 && settings.cover != 0 {
+					let size = std::cmp::min(args.artwork as u32, settings.cover as u32);
+					dec.resize(size, size, image::imageops::FilterType::Lanczos3)
+				} else {
+					dec
+				}
+				.to_rgb8();
+				Some(img)
+			});
+		};
+	};
+	Some(Metadata {
+		title,
+		album,
+		artist,
+		cover: cover.join().unwrap(),
+	})
+}
+
 async fn stream(mut s: impl Write, tracklist: Arc<Vec<PathBuf>>, settings: Settings) {
 	let args = Args::parse();
 	let encoder_wants = match settings.encoder {
@@ -304,46 +359,20 @@ async fn stream(mut s: impl Write, tracklist: Arc<Vec<PathBuf>>, settings: Setti
 	loop {
 		let track = tracklist.choose(&mut thread_rng()).unwrap().clone();
 
-		let mut title = String::new();
-		let mut artist = String::new();
-		let mut album = String::new();
-		let mut cover = std::thread::spawn(|| None);
-		let mut file = std::fs::File::open(&track).unwrap();
-		let tagged = match lofty::read_from(&mut file) {
-			Ok(f) => f,
+		let Metadata {
+			title,
+			album,
+			artist,
+			cover,
+		} = match get_metadata(&track, &args, &settings) {
+			Some(m) => m,
 			_ => continue,
 		};
-		if let Some(id3v2) = tagged.primary_tag() {
-			title =
-				id3v2.title().unwrap_or(track.file_stem().unwrap().to_string_lossy()).to_string();
-			album = id3v2.album().unwrap_or("".into()).to_string();
-			artist = id3v2.artist().unwrap_or("".into()).to_string();
-			if !(id3v2.pictures().is_empty() || args.artwork == -1 || settings.cover == -1) {
-				let pic = id3v2.pictures()[0].clone();
-				cover = std::thread::spawn(move || {
-					let dec = ImageReader::new(Cursor::new(pic.into_data()))
-						.with_guessed_format()
-						.ok()?
-						.decode()
-						.ok()?;
-					let mut img = Vec::new();
-					if args.artwork != 0 && settings.cover != 0 {
-						let size = std::cmp::min(args.artwork as u32, settings.cover as u32);
-						dec.resize(size, size, image::imageops::FilterType::Lanczos3)
-					} else {
-						dec
-					}
-					.to_rgb8()
-					.write_to(&mut Cursor::new(&mut img), image::ImageFormat::Jpeg)
-					.unwrap();
-					Some(img)
-				});
-			};
-		};
+
 		let track_message = format!("{} - {} - {}", &artist, &album, &title);
 		println!("[{}] {} ({:?})", Local::now().to_rfc3339(), track_message, settings.encoder);
 
-		let (channels, sample_rate, time) = get_meta(track.as_path(), encoder_wants).await;
+		let (channels, sample_rate, time) = get_meta(track.as_path(), encoder_wants);
 		let stream = decode_file_stream(track, encoder_wants);
 		let id = thread_rng().gen();
 		if stream_track(
@@ -352,7 +381,11 @@ async fn stream(mut s: impl Write, tracklist: Arc<Vec<PathBuf>>, settings: Setti
 				track_length_frac: time.frac as f32,
 				track_length_secs: time.seconds,
 				encoder: settings.encoder,
-				cover: cover.join().unwrap(),
+				cover: cover.map(|x| {
+					let mut buf = Cursor::new(Vec::new());
+					x.write_to(&mut buf, image::ImageFormat::Jpeg).unwrap();
+					buf.into_inner()
+				}),
 				id,
 				album,
 				artist,

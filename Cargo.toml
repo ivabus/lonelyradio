@@ -10,7 +10,7 @@ members = [
 [package]
 name = "lonelyradio"
 description = "TCP radio for lonely ones"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 license = "MIT"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
@@ -49,14 +49,16 @@ samplerate = "0.2.4"
 flacenc = { version = "0.4.0", default-features = false, optional = true }
 alac-encoder = { version = "0.3.0", optional = true }
 vorbis_rs = {version = "0.5.4", optional = true }
+sea-codec = { version = "0.5.2", optional = true }
 
 [features]
 default = ["all-lossless", "all-lossy"]
 all-lossless = ["alac", "flac"]
-all-lossy = ["vorbis"]
+all-lossy = ["vorbis", "sea"]
 alac = ["dep:alac-encoder"]
 flac = ["dep:flacenc"]
 vorbis = ["dep:vorbis_rs"]
+sea = ["dep:sea-codec"]
 
 [profile.distribute]
 inherits = "release"

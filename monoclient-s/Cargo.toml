@@ -3,16 +3,20 @@ name = "monoclient-s"
 description = "Client for lonelyradio built with Slint"
 version = "0.7.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
-slint = { version = "1.6" }
+slint = { version = "1.8" }
 monolib = { path = "../monolib", version = "0.7.1" }
 zune-jpeg = "0.4.13"
+
+[build-dependencies]
+slint-build = "1.8"
 
 [package.metadata.bundle]
 name = "monoclient-s"
 identifier = "dev.ivabus.monoclient-s"
 icon = ["lonelyradio.png", "lonelyradio.icns"]
-version = "0.5.0"
+version = "0.7.1"
 copyright = "Copyright (c) 2024 Ivan Bushchik."
 category = "Music"

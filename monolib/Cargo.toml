@@ -3,7 +3,7 @@ name = "monolib"
 version = "0.7.1"
 edition = "2021"
 license = "MIT"
-description = "A library implementing the lonely radio audio streaming protocol"
+description = "A library implementing the lonelyradio audio streaming protocol"
 repository = "https://github.com/ivabus/lonelyradio"
 authors = ["Ivan Bushchik <ivabus@ivabus.dev>"]
 
@@ -22,15 +22,17 @@ anyhow = "1.0.86"
 claxon = { version = "0.4.3", optional = true }
 symphonia-codec-alac = {version = "0.5.4", optional = true }
 symphonia-core = {version = "0.5.4", optional = true }
-vorbis_rs = {version = "0.5.4", optional = true }
+lewton = {version = "0.10.2", optional = true }
+sea-codec = { version = "0.5.2", optional = true }
 
 [features]
 default = ["all-lossless", "all-lossy"]
 all-lossless = ["alac", "flac"]
-all-lossy = ["vorbis"]
+all-lossy = ["vorbis", "sea"]
 alac = ["dep:symphonia-codec-alac", "dep:symphonia-core"]
 flac = ["dep:claxon"]
-vorbis = ["dep:vorbis_rs"]
+vorbis = ["dep:lewton"]
+sea = ["dep:sea-codec"]
 
 [package.metadata.xcframework]
 include-dir = "src"
@@ -38,5 +40,4 @@ lib-type = "cdylib"
 zip = false
 macOS = true
 iOS = true
-#tvOS = true
-simulators = true
+simulators = false

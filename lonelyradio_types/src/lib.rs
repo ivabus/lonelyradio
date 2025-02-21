@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 pub const HELLO_MAGIC: &[u8; 8] = b"lonelyra";
@@ -99,6 +101,7 @@ pub enum Encoder {
 	Opus = 5,
 	Aac = 6,
 	Vorbis = 7,
+	Sea = 8,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -118,4 +121,20 @@ pub struct FragmentMetadata {
 
 fn none() -> Option<Vec<u8>> {
 	None
+}
+
+impl Display for Encoder {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(match self {
+			Self::Pcm16 => "PCM s16",
+			Self::PcmFloat => "PCM f32",
+			Self::Flac => "FLAC",
+			Self::Alac => "ALAC",
+			Self::WavPack => "WavPack",
+			Self::Opus => "Opus",
+			Self::Aac => "AAC",
+			Self::Vorbis => "Vorbis",
+			Self::Sea => "Sea",
+		})
+	}
 }

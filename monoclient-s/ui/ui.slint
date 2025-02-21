@@ -1,0 +1,286 @@
+import { Palette, Slider, ComboBox } from "std-widgets.slint";
+component Button {
+    in-out property icon <=> img.source;
+    in property <bool> wanted;
+    in property <bool> enabled: false;
+    callback clicked;
+    VerticalLayout {
+        alignment: center;
+        spacing: 8px;
+        img := Image {
+			// What the actual fuck
+			x: 7px;
+            colorize: enabled ? Palette.foreground : Palette.foreground.darker(10%);
+            width: 16px;
+            height: 16px;
+            horizontal-alignment: center;
+            opacity: 1;
+        }
+
+        rect := Rectangle {
+            touch := TouchArea {
+                clicked => {
+                    if enabled {
+                        clicked()
+                    }
+                }
+            }
+
+            border-radius: root.height / 2;
+            border-width: 1px;
+            border-color: Palette.border;
+            background: enabled ? (touch.pressed ? Palette.control-background.darker(45%) : (touch.has-hover ? Palette.control-background.darker(35%) : Palette.control-background)) : Palette.control-background.darker(35%);
+            animate background { duration: 166ms; }
+
+            drop-shadow-blur: wanted ? pow(abs(mod(animation-tick() / 1s - 3, 6) - 3) / 3, 2) * 128.0 * 1px : 0px;
+            drop-shadow-color: self.border-color;
+            width: 32px;
+            height: 32px;
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    callback play;
+    callback stop;
+    callback next;
+    callback refreshp;
+    callback change_volume(float);
+    callback text_edited;
+
+    in-out property <string> addr: address.text;
+    in-out property <string> mtitle: "";
+    in-out property <string> malbum: "";
+    in-out property <string> martist: "";
+    in-out property <float> volume: svolume.value;
+    in-out property <bool> start_enabled: false;
+    in-out property <bool> playing: false;
+    in-out property <bool> paused: false;
+    in property <image> cover: @image-url("../lonelyradio.png");
+    in property <[string]> playlists: ["All tracks"];
+    in property <[string]> supported_encoders: [];
+    in-out property <string> selected_playlist: selected.current-value;
+    in-out property <int> selected_encoder: encoder.current-index;
+
+    property <bool> settings: false;
+
+    title: "monoclient-s";
+    min-width: 448px;
+    max-width: 448px * 3;
+    preferred-width: 448px;
+    height: main.height;
+    animate background { duration: 166ms; }
+
+    panels := HorizontalLayout {
+        width: root.width * 2;
+        x: settings ? -root.width : 0.0;
+        height: main.height;
+        animate x {
+            easing: ease-in-out-expo;
+            duration: 0.5s;
+        }
+
+        main := HorizontalLayout {
+            width: root.width;
+            height: rect.height + self.padding * 2;
+            spacing: 16px;
+            padding: 16px;
+
+            rect := Rectangle {
+                opacity: playing ? 1.0 : 0.0;
+                animate opacity {
+                    duration: 0.25s;
+                    easing: ease-in-out;
+                }
+                clip: true;
+                border-radius: 6px;
+                animate background { duration: 166ms; }
+                background: Palette.foreground;
+						//width: 240px;
+						height: img.height + 12px * 2 + 1.5rem * 3;
+                max-width: parent.width;
+                border-width: 0px;
+                VerticalLayout {
+                    img := Image {
+                        vertical-alignment: top;
+                        source: cover;
+                        min-width: 240px;
+                        height: self.width;
+                        image-fit: contain;
+                    }
+
+                    VerticalLayout {
+                        padding: 12px;
+                        tartist := Text {
+                            color: Palette.background;
+                            vertical-alignment: center;
+                            height: 1.5rem;
+                            font-weight: 600;
+                            text: martist;
+                            overflow: elide;
+                        }
+
+                        talbum := Text {
+                            color: Palette.background;
+                            vertical-alignment: center;
+                            height: 1.5rem;
+                            text: malbum;
+                            overflow: elide;
+                        }
+
+                        ttitle := Text {
+                            color: Palette.background;
+                            vertical-alignment: center;
+
+                            height: 1.5rem;
+                            text: mtitle;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+						//max-width: 160px;
+						spacing: 16px;
+                VerticalLayout {
+                    spacing: 16px;
+                    HorizontalLayout {
+                        padding: 8px;
+                        alignment: center;
+                        spacing: 16px;
+								//height: 96px;
+								Button {
+                            icon: @image-url("icons/stop.svg");
+                            enabled: playing && !paused;
+                            clicked => {
+                                stop()
+                            }
+                        }
+
+                        Button {
+                            icon: playing ? (paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg")) : @image-url("icons/random.svg");
+                            enabled: start_enabled || playing;
+                            wanted: start_enabled && !playing;
+                            clicked => {
+                                play()
+                            }
+                        }
+
+                        Button {
+                            icon: @image-url("icons/next.svg");
+                            enabled: playing && !paused;
+                            clicked => {
+                                next()
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        padding: 16px;
+                        clip: true;
+                        background: Palette.background;
+                        border-color: Palette.border;
+                        animate background, border-color { duration: 166ms; }
+                        border-width: 1px;
+                        border-radius: 4px;
+                        drop-shadow-blur: !start_enabled ? pow(abs(mod(animation-tick() / 1s - 3, 6) - 3) / 3, 2) * 128.0 * 1px : 0px;
+                        drop-shadow-color: Palette.border;
+                        VerticalLayout {
+                            alignment: center;
+                            padding: 8px;
+                            address := TextInput {
+                                text: "";
+                                accepted => {
+                                    self.clear_focus()
+                                }
+
+                                edited => {
+                                    text_edited();
+                                }
+                            }
+                        }
+                    }
+
+                    svolume := Slider {
+                        value: 255;
+                        maximum: 255;
+                        changed(f) => {
+                            change_volume(f)
+                        }
+                    }
+
+                    HorizontalLayout {
+                        alignment: center;
+                        Button {
+                            icon: @image-url("icons/gear.svg");
+                            enabled: true;
+                            wanted: false;
+                            clicked => {
+                                settings = !settings;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        VerticalLayout {
+            width: root.width;
+            height: root.height;
+            alignment: center;
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 20px;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    Text {
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        text: "Playlists";
+                    }
+
+                    selected := ComboBox {
+                        model: playlists;
+                        current-index: 0;
+                        selected() => {
+                            self.clear_focus()
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    Text {
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                        text: "Encoder";
+                    }
+
+                    encoder := ComboBox {
+                        model: supported_encoders;
+                        selected() => {
+                            self.clear_focus()
+                        }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Button {
+                    icon: @image-url("icons/first.svg");
+                    enabled: true;
+                    wanted: false;
+                    clicked => {
+                        settings = !settings;
+                    }
+                }
+            }
+        }
+    }
+}

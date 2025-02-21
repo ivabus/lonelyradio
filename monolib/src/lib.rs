@@ -38,15 +38,17 @@ mod decode;
 const CACHE_SIZE_PCM: usize = 32;
 const CACHE_SIZE_COMPRESSED: usize = 4;
 
-const SUPPORTED_DECODERS: &[Encoder] = &[
-	Encoder::Pcm16,
-	Encoder::PcmFloat,
+pub const SUPPORTED_DECODERS: &[Encoder] = &[
 	#[cfg(feature = "flac")]
 	Encoder::Flac,
 	#[cfg(feature = "alac")]
 	Encoder::Alac,
 	#[cfg(feature = "vorbis")]
 	Encoder::Vorbis,
+	#[cfg(feature = "sea")]
+	Encoder::Sea,
+	Encoder::PcmFloat,
+	Encoder::Pcm16,
 ];
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);

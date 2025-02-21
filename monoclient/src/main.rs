@@ -57,7 +57,7 @@ fn main() {
 		monolib::run(
 			&args.address,
 			Settings {
-				encoder: Encoder::Flac,
+				encoder: Encoder::Sea,
 				cover: -1,
 			},
 			&args.playlist,

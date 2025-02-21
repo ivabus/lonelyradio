@@ -4,12 +4,12 @@ Shuffles through your [XSPF playlists](https://www.xspf.org) or your entire libr
 
 Decodes audio streams using [symphonia](https://github.com/pdeljanov/Symphonia) (supported [decoders](https://github.com/pdeljanov/Symphonia?tab=readme-ov-file#codecs-decoders) and [demuxers](https://github.com/pdeljanov/Symphonia?tab=readme-ov-file#formats-demuxers))
 
-Streams music using [FLAC](https://crates.io/crates/flacenc), [ALAC](https://crates.io/crates/alac-encoder), [Vorbis](https://crates.io/crates/vorbis_rs) or raw PCM on client’s requests.
+Streams music using [FLAC](https://crates.io/crates/flacenc), [ALAC](https://crates.io/crates/alac-encoder), [Vorbis](https://crates.io/crates/vorbis_rs), [Sea](https://github.com/Daninet/sea-codec) or raw PCM on client’s requests.
 
 ### Install server
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 lonelyradio
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.1 lonelyradio
 ```
 
 ### Run
@@ -57,7 +57,7 @@ Only the `<location>` and (playlist's) element would be used and only `file://` 
 ##### Install
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 monoclient-s
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.1 monoclient-s
 ```
 
 You may need to install some dependencies for Slint.
@@ -71,7 +71,7 @@ Desktop integration will be added later.
 ##### Install monoclient
 
 ```shell
-cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.0 monoclient
+cargo install --git https://github.com/ivabus/lonelyradio --tag 0.7.1 monoclient
 ```
 
 #### Usage

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="10mm"
+   height="10mm"
+   viewBox="0 0 10 10"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   sodipodi:docname="random.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="12.005348"
+     inkscape:cx="13.993764"
+     inkscape:cy="26.987973"
+     inkscape:window-width="1536"
+     inkscape:window-height="1013"
+     inkscape:window-x="0"
+     inkscape:window-y="43"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1">
+    <inkscape:perspective
+       sodipodi:type="inkscape:persp3d"
+       inkscape:vp_x="0 : 5 : 1"
+       inkscape:vp_y="0 : 1000 : 0"
+       inkscape:vp_z="10 : 5 : 1"
+       inkscape:persp3d-origin="5 : 3.3333333 : 1"
+       id="perspective1" />
+  </defs>
+  <g
+     inkscape:label="Слой 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g6"
+       transform="translate(-0.41149989)">
+      <rect
+         style="fill:#000000;stroke-width:0"
+         id="rect6"
+         width="10"
+         height="1"
+         x="2.0706227"
+         y="-0.50035352"
+         rx="0.5"
+         ry="0.5"
+         transform="rotate(45)" />
+      <rect
+         style="fill:#000000;stroke-width:0"
+         id="rect6-7"
+         width="10"
+         height="1"
+         x="-5"
+         y="6.5702691"
+         rx="0.5"
+         ry="0.5"
+         transform="rotate(-45)" />
+      <path
+         sodipodi:type="star"
+         style="fill:#000000;stroke-width:0"
+         id="path3"
+         inkscape:flatsided="true"
+         sodipodi:sides="3"
+         sodipodi:cx="1.7518876"
+         sodipodi:cy="1.4281693"
+         sodipodi:r1="1.9958065"
+         sodipodi:r2="3.9916129"
+         sodipodi:arg1="0.51914611"
+         sodipodi:arg2="1.5663437"
+         inkscape:rounded="0.07"
+         inkscape:randomized="0"
+         d="M 3.4847328,2.4183665 C 3.3646778,2.6284629 0.14985015,2.6427775 0.02792892,2.4337586 -0.09399232,2.2247398 1.5010247,-0.56653997 1.7430009,-0.56761742 1.9849772,-0.56869487 3.6047879,2.2082702 3.4847328,2.4183665 Z"
+         inkscape:transform-center-x="-0.0861241"
+         inkscape:transform-center-y="-0.087606847"
+         transform="matrix(0.63138587,0.63138587,-0.63138587,0.63138587,8.0200992,-0.32204334)" />
+      <path
+         sodipodi:type="star"
+         style="fill:#000000;stroke-width:0"
+         id="path3-6"
+         inkscape:flatsided="true"
+         sodipodi:sides="3"
+         sodipodi:cx="1.7518876"
+         sodipodi:cy="1.4281693"
+         sodipodi:r1="1.9958065"
+         sodipodi:r2="3.9916129"
+         sodipodi:arg1="0.51914611"
+         sodipodi:arg2="1.5663437"
+         inkscape:rounded="0.07"
+         inkscape:randomized="0"
+         d="M 3.4847328,2.4183665 C 3.3646778,2.6284629 0.14985015,2.6427775 0.02792892,2.4337586 -0.09399232,2.2247398 1.5010247,-0.56653997 1.7430009,-0.56761742 1.9849772,-0.56869487 3.6047879,2.2082702 3.4847328,2.4183665 Z"
+         inkscape:transform-center-x="-0.087607003"
+         inkscape:transform-center-y="0.086124089"
+         transform="matrix(-0.63138587,0.63138587,-0.63138587,-0.63138587,10.22831,8.1200992)" />
+    </g>
+  </g>
+</svg>
