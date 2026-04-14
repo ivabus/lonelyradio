@@ -18,7 +18,7 @@ repository = "https://github.com/ivabus/lonelyradio"
 
 [dependencies]
 lonelyradio_types = { version = "0.7.0", path = "./lonelyradio_types" }
-rand = "0.8.5"
+rand = "0.9.3"
 clap = { version = "4.4.18", features = ["derive"] }
 tokio = { version = "1.35.1", features = [
     "net",
